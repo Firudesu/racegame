@@ -116,7 +116,15 @@
   const DEFAULT_ZONE_INDEX = Math.floor(ZONE_COUNT / 2);
   const ZONE_CHANGE_RATE = 2.6;
   const PASS_DISTANCE_THRESHOLD = 24;
-  const PASS_COOLDOWN = 1.2;
+  const PASS_COOLDOWN_MIN = 2.0;
+  const PASS_COOLDOWN_MAX = 4.0;
+  const PASS_COST_SUCCESS = { min: 6, max: 10 };
+  const PASS_COST_FAIL = { min: 4, max: 8 };
+  const BLOCK_STAMINA_TICK = 2;
+  const BLOCK_DEFENSE_COST = 2.5;
+  const FINAL_SPRINT_COST = 15;
+  const BLOCKED_DRAIN_INTERVAL = 0.6;
+  const COAST_REGEN_BASE = 0.12;
   const START_PHASE_LIMIT = 0.25;
   const FINAL_PHASE_START = 0.8;
   const STYLE_PHASE_MAP = Object.fromEntries(
@@ -672,6 +680,7 @@
         const ahead = group[i];
         const behind = group[i + 1];
         if (behind.passCooldown > 0) continue;
+        if (behind.energy <= PASS_COST_FAIL.min + 1) continue;
         const gap = (ahead.distance - behind.distance + TRACK_LENGTH) % TRACK_LENGTH;
         if (gap <= 0 || gap > PASS_DISTANCE_THRESHOLD) continue;
         attemptPass(behind, ahead, race);
@@ -685,6 +694,7 @@
     const midIndex = DEFAULT_ZONE_INDEX;
     const outsideIndex = ZONE_COUNT - 1;
 
+    const now = race.time;
     race.racers.forEach((racer) => {
       if (racer.finished) return;
       racer.strategyCooldown = Math.max(0, (racer.strategyCooldown || 0) - dt);
@@ -693,6 +703,11 @@
       const progress = (racer.distance % TRACK_LENGTH) / TRACK_LENGTH;
       const energyPct = (racer.energy / racer.maxEnergy) * 100;
       const blocked = isBlockedAhead(racer, race);
+      racer.isBlocked = blocked;
+      if (blocked && now - (racer.lastBlockDrain || 0) > BLOCKED_DRAIN_INTERVAL) {
+        spendStamina(racer, BLOCK_STAMINA_TICK, "blocked", race);
+        racer.lastBlockDrain = now;
+      }
       const rank = getRank(racer, leaderboard);
       let desired = racer.targetZone ?? racer.zoneIndex ?? midIndex;
 
@@ -779,7 +794,9 @@
     const roll = sampleRng(race);
     let success = maneuverAdvantage || speedAdvantage || roll < passChance;
 
-    const cooldown = PASS_COOLDOWN * (behind.cooldownFactor || 1);
+    behind.lastPassAttempt = race.time;
+    const baseCooldown = randomBetween(race, PASS_COOLDOWN_MIN, PASS_COOLDOWN_MAX);
+    const cooldown = baseCooldown * (behind.cooldownFactor || 1);
     behind.passCooldown = cooldown;
 
     if (success && ahead.defenseBonus) {
@@ -838,6 +855,9 @@
       behind.lane = chosenLane;
       behind.distance += 1;
       behind.passCooldown = cooldown;
+      spendStamina(behind, randomBetween(race, PASS_COST_SUCCESS.min, PASS_COST_SUCCESS.max), "pass_success", race);
+      spendStamina(ahead, BLOCK_DEFENSE_COST, "passed", race);
+      ahead.strategyCooldown = randomBetween(race, PASS_COOLDOWN_MIN * 0.5, PASS_COOLDOWN_MIN);
       behind.strategyCooldown = randomBetween(race, 0.3, 0.6);
       console.log(
         `%cPass Success%c ${behind.name} (${racerStyle}) moved to ${TRACK_ZONES[behind.lane]?.display || "outer lane"}`,
@@ -852,6 +872,8 @@
       }
       behind.speed *= slowdown;
       behind.strategyCooldown = randomBetween(race, 0.5, 0.8);
+      spendStamina(behind, randomBetween(race, PASS_COST_FAIL.min, PASS_COST_FAIL.max), "pass_fail", race);
+      spendStamina(ahead, BLOCK_DEFENSE_COST * 0.5, "defend", race);
       console.log(
         `%cPass Blocked%c ${behind.name} (${racerStyle}) slowed (${(slowdown * 100).toFixed(0)}%)`,
         "color:#f85149; font-weight:bold;",
@@ -989,7 +1011,7 @@
     mood,
     performance
   }) {
-    const maxEnergy = stats.endurance * 10;
+    const maxEnergy = 100 + stats.endurance * 10;
     const useStyle = style || "Pacer";
     const styleLabel = styleName || useStyle;
     const perf = performance ? { ...performance } : derivePerformanceBundle(stats, useStyle);
@@ -998,46 +1020,55 @@
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
+    const staminaDrain = Math.max(0.05, 0.25 + stats.stride / 200 - stats.endurance / 300);
 
-    const racerObj = {
-      id,
-      name,
-      color,
-      stats: deepClone(stats),
-      skills: skills.map((skill) => ({
-        ...deepClone(skill),
-        active: false,
-        timer: 0,
-        used: false
-      })),
-      modifiers: modifiers || { trainingBonus: 0, skillChanceBonus: 0 },
-      style: useStyle,
-      styleName: styleLabel,
-      isPlayer,
-      distance: 0,
-      speed: 0,
-      energy: maxEnergy,
-      maxEnergy,
-      phase: "start",
-      finished: false,
-      finishTime: null,
-      depleted: false,
-      skillLog: [],
-      rngModifier: 0,
-      mood,
-      skillToast: null,
-      energyHistory: [{ time: 0, energy: 100 }],
-      energySampleTimer: 0,
-      performance: maneuverAdjusted,
-      baseSpeed,
-      maxSpeed,
-      acceleration,
-      lane: 0,
-      passCooldown: 0,
-      strategyCooldown: 0,
-      startAggro: 0,
-      lastPhaseLogged: null
-    };
+      const racerObj = {
+        id,
+        name,
+        color,
+        stats: deepClone(stats),
+        skills: skills.map((skill) => ({
+          ...deepClone(skill),
+          active: false,
+          timer: 0,
+          used: false
+        })),
+        modifiers: modifiers || { trainingBonus: 0, skillChanceBonus: 0 },
+        style: useStyle,
+        styleName: styleLabel,
+        isPlayer,
+        distance: 0,
+        speed: 0,
+        energy: maxEnergy,
+        maxEnergy,
+        phase: "start",
+        finished: false,
+        finishTime: null,
+        depleted: false,
+        skillLog: [],
+        rngModifier: 0,
+        mood,
+        skillToast: null,
+        energyHistory: [{ time: 0, energy: 100 }],
+        energySampleTimer: 0,
+        performance: maneuverAdjusted,
+        baseSpeed,
+        maxSpeed,
+        acceleration,
+        lane: 0,
+        passCooldown: 0,
+        strategyCooldown: 0,
+        startAggro: 0,
+        lastPhaseLogged: null,
+        baseDrain: staminaDrain,
+        fatigueThreshold: maxEnergy * 0.3,
+        finalBurst: false,
+        finalBurstTimer: 0,
+        lastPassAttempt: 0,
+        isBlocked: false,
+        lowStaminaNotified: false,
+        lastBlockDrain: 0
+      };
     applyPassiveSkills(racerObj);
     initializeZoneState(racerObj, DEFAULT_ZONE_INDEX);
     return racerObj;
@@ -1122,6 +1153,33 @@
     }
     racer.acceleration *= racer.adaptiveFactor;
     racer.handlingPenaltyActive = racer.handlingPenaltyBase;
+  }
+
+  function spendStamina(racer, amount, reason, race) {
+    if (!racer || !amount) return;
+    const cost = Math.max(0, amount);
+    racer.energy = Math.max(0, racer.energy - cost);
+    if (racer.energy <= racer.fatigueThreshold * 0.35 && !racer.lowStaminaNotified) {
+      console.log(`%cStamina Low%c ${racer.name} is fading (${Math.round((racer.energy / racer.maxEnergy) * 100)}%)`, "color:#ff6b6b; font-weight:bold;", "color:#d0d3e8");
+      racer.lowStaminaNotified = true;
+    }
+    if (racer.energy > racer.fatigueThreshold * 0.6) {
+      racer.lowStaminaNotified = false;
+      if (racer.energy > racer.fatigueThreshold) {
+        racer.depleted = false;
+      }
+    }
+  }
+
+  function recoverStamina(racer, amount) {
+    if (!racer || !amount) return;
+    racer.energy = Math.min(racer.maxEnergy, racer.energy + amount);
+    if (racer.energy > racer.fatigueThreshold * 0.6) {
+      racer.lowStaminaNotified = false;
+      if (racer.energy > racer.fatigueThreshold) {
+        racer.depleted = false;
+      }
+    }
   }
 
   function computeSlipstreamMultiplier(racer, race) {
@@ -1273,7 +1331,8 @@
 
     const baseSpeed = racer.baseSpeed;
     const styleMultiplier = getStylePhaseMultiplier(racer.style, phase);
-    const energyFactor = Math.max(0.4, racer.energy / racer.maxEnergy);
+    const staminaRatio = Math.max(0, Math.min(1, racer.energy / racer.maxEnergy));
+    const energyFactor = Math.max(0.4, staminaRatio);
     const skillMultiplier = resolveSkillMultiplier(racer, dt);
     const resolveBoost = phase === "final" && racer.stats.resolve > 40 ? 1 + (racer.stats.resolve - 40) * 0.005 : 1;
     const moodPercent = clamp(Math.round(racer.mood ?? 70), 0, 120);
@@ -1281,6 +1340,19 @@
     const jitterRange = (sampleRng(race) - 0.5) * 0.06 * (racer.jitterFactor || 1);
     const rngJitter = 1 + jitterRange + racer.rngModifier;
     const slipstreamMultiplier = computeSlipstreamMultiplier(racer, race);
+
+    let finalBurstMultiplier = 1;
+    if (phase === "final") {
+      if (!racer.finalBurst && racer.energy > FINAL_SPRINT_COST + 5) {
+        spendStamina(racer, FINAL_SPRINT_COST, "final_sprint", race);
+        racer.finalBurst = true;
+        racer.finalBurstTimer = 2.5 + racer.stats.resolve / 140;
+      }
+      if (racer.finalBurstTimer > 0) {
+        finalBurstMultiplier += 0.08 + racer.stats.resolve / 400;
+        racer.finalBurstTimer -= dt;
+      }
+    }
 
     let targetSpeed =
       baseSpeed *
@@ -1290,10 +1362,11 @@
       resolveBoost *
       moodMultiplier *
       slipstreamMultiplier *
+      finalBurstMultiplier *
       rngJitter;
 
     if (racer.energy <= 0) {
-      targetSpeed *= 0.6;
+      targetSpeed *= 0.58;
       racer.depleted = true;
     }
 
@@ -1311,15 +1384,30 @@
       updatedSpeed = Math.max(0, targetSpeed);
     }
 
+    if (racer.energy < racer.fatigueThreshold) {
+      const fatigueRatio = Math.max(0, Math.min(1, racer.energy / racer.fatigueThreshold));
+      let fatiguePenalty = lerp(0.72, 1, fatigueRatio);
+      fatiguePenalty += Math.max(0, (racer.stats.resolve - 60) / 320);
+      fatiguePenalty = Math.min(fatiguePenalty, 1);
+      updatedSpeed *= fatiguePenalty;
+    }
+
     racer.speed = updatedSpeed;
     racer.distance += (updatedSpeed * dt) / (racer.distanceMultiplier || 1);
 
-    const energyCost = updatedSpeed * 0.1 * dt * (racer.energyDrainFactor || 1);
-    racer.energy = Math.max(0, racer.energy - energyCost);
+    const intensity = Math.max(0.4, Math.min(1.3, updatedSpeed / Math.max(1, racer.baseSpeed)));
+    const maintainCost = racer.baseDrain * intensity * (racer.energyDrainFactor || 1) * dt;
+    spendStamina(racer, maintainCost, "maintain", race);
+
+    const timeSincePass = race.time - (racer.lastPassAttempt || 0);
+    if (!racer.isBlocked && timeSincePass > 2.2 && racer.energy < racer.maxEnergy) {
+      const regen = (COAST_REGEN_BASE + (racer.coolRecoveryRate || 0)) * dt;
+      recoverStamina(racer, regen);
+    }
 
     if (racer.coolRecoveryRate && updatedSpeed < racer.baseSpeed * 0.65) {
       const recovery = racer.maxEnergy * racer.coolRecoveryRate * dt;
-      racer.energy = Math.min(racer.maxEnergy, racer.energy + recovery);
+      recoverStamina(racer, recovery);
     }
 
     racer.energySampleTimer += dt;
@@ -1330,38 +1418,38 @@
     }
   }
 
-    function maybeTriggerSkills(racer, phase, race) {
-      racer.skills.forEach((skill) => {
-        if (skill.type && skill.type !== "active") return;
-        if (!skill.trigger) return;
-        if (skill.used || skill.active || skill.trigger !== phase) return;
+  function maybeTriggerSkills(racer, phase, race) {
+    racer.skills.forEach((skill) => {
+      if (skill.type && skill.type !== "active") return;
+      if (!skill.trigger) return;
+      if (skill.used || skill.active || skill.trigger !== phase) return;
 
-        let chance = 0.3 + racer.stats.insight * 0.002;
-        chance += racer.modifiers?.skillChanceBonus || 0;
-        const moodPercent = clamp(Math.round(racer.mood ?? 70), 0, 100);
-        chance += (moodPercent - 50) * 0.002;
+      let chance = 0.3 + racer.stats.insight * 0.002;
+      chance += racer.modifiers?.skillChanceBonus || 0;
+      const moodPercent = clamp(Math.round(racer.mood ?? 70), 0, 100);
+      chance += (moodPercent - 50) * 0.002;
 
-        if (!racer.isPlayer) {
-          if (racer.style === "Leader" && phase === "start") {
-            chance += 0.1;
-          } else if (racer.style === "Chaser" && phase === "final") {
-            chance += 0.2;
-          } else if (racer.style === "Sprinter" && phase === "final") {
-            chance += 0.15;
-          }
+      if (!racer.isPlayer) {
+        if (racer.style === "Leader" && phase === "start") {
+          chance += 0.1;
+        } else if (racer.style === "Chaser" && phase === "final") {
+          chance += 0.2;
+        } else if (racer.style === "Sprinter" && phase === "final") {
+          chance += 0.15;
         }
+      }
 
-        chance = clamp(chance, 0, 0.95);
+      chance = clamp(chance, 0, 0.95);
 
-        if (sampleRng(race) < chance) {
-          skill.active = true;
-          skill.timer = skill.duration;
-          skill.used = true;
-          racer.skillToast = { name: skill.name, timer: 1.5 };
-          racer.skillLog.push({ name: skill.name, time: race.time, phase });
-        }
-      });
-    }
+      if (sampleRng(race) < chance) {
+        skill.active = true;
+        skill.timer = skill.duration;
+        skill.used = true;
+        racer.skillToast = { name: skill.name, timer: 1.5 };
+        racer.skillLog.push({ name: skill.name, time: race.time, phase });
+      }
+    });
+  }
 
   function resolveSkillMultiplier(racer, dt) {
     let multiplier = 1;
@@ -1496,7 +1584,7 @@
       details.innerHTML = `
         <summary>Race log</summary>
         <div>
-          <strong>Energy</strong>
+          <strong>Stamina</strong>
           <ul>${energyList || "<li>No data</li>"}</ul>
           <strong>Skills</strong>
           <ul>${skillLogList}</ul>
