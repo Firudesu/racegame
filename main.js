@@ -663,6 +663,20 @@
     });
   }
 
+  function zoneLabelToIndex(label) {
+    if (!label) return null;
+    const normalized = String(label).toLowerCase();
+    if (normalized === "inside") return 0;
+    if (normalized === "outside") return ZONE_COUNT - 1;
+    return DEFAULT_ZONE_INDEX;
+  }
+
+  function scheduleStrategy(racer, race, min, max) {
+    const factor = clamp(racer.zoneDecisionFactorActive ?? racer.zoneDecisionFactorBase ?? 1, 0.5, 1.3);
+    const duration = randomBetween(race, min, max) * factor;
+    racer.strategyCooldown = Math.max(0.1, duration);
+  }
+
   function handlePassing(race, dt) {
     const active = race.racers.filter((r) => !r.finished);
     const laneGroups = new Map();
@@ -702,6 +716,7 @@
 
       const progress = (racer.distance % TRACK_LENGTH) / TRACK_LENGTH;
       const energyPct = (racer.energy / racer.maxEnergy) * 100;
+      const phase = progress < START_PHASE_LIMIT ? "start" : progress < FINAL_PHASE_START ? "middle" : "final";
       const blocked = isBlockedAhead(racer, race);
       racer.isBlocked = blocked;
       if (blocked && now - (racer.lastBlockDrain || 0) > BLOCKED_DRAIN_INTERVAL) {
@@ -711,7 +726,7 @@
       const rank = getRank(racer, leaderboard);
       let desired = racer.targetZone ?? racer.zoneIndex ?? midIndex;
 
-      if (progress < START_PHASE_LIMIT) {
+      if (phase === "start") {
         const accelScore = racer.stats.stride + racer.stats.force;
         if (accelScore > 135 || (racer.startAggro || 0) > 0.55) {
           desired = insideIndex;
@@ -720,8 +735,8 @@
         } else {
           desired = sampleRng(race) > 0.5 ? insideIndex : midIndex;
         }
-        racer.strategyCooldown = randomBetween(race, 0.2, 0.5);
-      } else if (progress < FINAL_PHASE_START) {
+        scheduleStrategy(racer, race, 0.2, 0.5);
+      } else if (phase === "middle") {
         if (blocked) {
           if (racer.stats.insight > 60 && racer.performance.maneuver > 55) {
             desired = Math.min(outsideIndex, (racer.zoneIndex ?? midIndex) + 1);
@@ -737,7 +752,7 @@
             desired = midIndex;
           }
         }
-        racer.strategyCooldown = randomBetween(race, 0.8, 1.4);
+        scheduleStrategy(racer, race, 0.8, 1.4);
       } else {
         desired = outsideIndex;
         if (rank === 1 && !blocked && energyPct > 35) {
@@ -746,7 +761,16 @@
         if (energyPct < 25) {
           desired = midIndex;
         }
-        racer.strategyCooldown = randomBetween(race, 0.4, 0.7);
+        scheduleStrategy(racer, race, 0.4, 0.7);
+      }
+
+      const biasSource = racer.zoneBiasActive ?? racer.zoneBiasPassive;
+      const biasPhase = racer.zoneBiasActive ? racer.zoneBiasActivePhase : racer.zoneBiasPhase;
+      if (biasSource && (!biasPhase || biasPhase === phase)) {
+        const biasIndex = zoneLabelToIndex(biasSource);
+        if (biasIndex !== null) {
+          desired = biasIndex;
+        }
       }
 
       desired = Math.max(0, Math.min(outsideIndex, desired));
@@ -789,6 +813,11 @@
     const progress = (behind.distance % TRACK_LENGTH) / TRACK_LENGTH;
     if (progress >= FINAL_PHASE_START) {
       passChance = Math.min(0.99, passChance + (behind.stats.force + behind.stats.insight) / 400);
+    }
+
+    const insightBoost = behind.insightBonusActive ?? behind.insightBonusBase ?? 0;
+    if (insightBoost) {
+      passChance = clamp(passChance + insightBoost, 0.05, 0.99);
     }
 
     const roll = sampleRng(race);
@@ -857,8 +886,8 @@
       behind.passCooldown = cooldown;
       spendStamina(behind, randomBetween(race, PASS_COST_SUCCESS.min, PASS_COST_SUCCESS.max), "pass_success", race);
       spendStamina(ahead, BLOCK_DEFENSE_COST, "passed", race);
-      ahead.strategyCooldown = randomBetween(race, PASS_COOLDOWN_MIN * 0.5, PASS_COOLDOWN_MIN);
-      behind.strategyCooldown = randomBetween(race, 0.3, 0.6);
+      scheduleStrategy(ahead, race, PASS_COOLDOWN_MIN * 0.5, PASS_COOLDOWN_MIN);
+      scheduleStrategy(behind, race, 0.3, 0.6);
       console.log(
         `%cPass Success%c ${behind.name} (${racerStyle}) moved to ${TRACK_ZONES[behind.lane]?.display || "outer lane"}`,
         "color:#58d68d; font-weight:bold;",
@@ -871,7 +900,7 @@
         slowdown = 1 - penalty * behind.recoveryFactor;
       }
       behind.speed *= slowdown;
-      behind.strategyCooldown = randomBetween(race, 0.5, 0.8);
+      scheduleStrategy(behind, race, 0.5, 0.8);
       spendStamina(behind, randomBetween(race, PASS_COST_FAIL.min, PASS_COST_FAIL.max), "pass_fail", race);
       spendStamina(ahead, BLOCK_DEFENSE_COST * 0.5, "defend", race);
       console.log(
@@ -951,7 +980,8 @@
       performance: config.playerSnapshot.performance
     });
     player.startAggro = rng();
-    player.strategyCooldown = 0.2 + rng() * 0.3;
+    const playerDecisionFactor = clamp(player.zoneDecisionFactorBase ?? 1, 0.5, 1.3);
+    player.strategyCooldown = (0.2 + rng() * 0.3) * playerDecisionFactor;
     racers.push(player);
 
     config.aiBlueprints.forEach((blueprint, index) => {
@@ -969,7 +999,8 @@
         performance: blueprint.performance
       });
       aiRacer.startAggro = rng();
-      aiRacer.strategyCooldown = 0.3 + rng() * 0.5;
+      const aiDecisionFactor = clamp(aiRacer.zoneDecisionFactorBase ?? 1, 0.5, 1.3);
+      aiRacer.strategyCooldown = (0.3 + rng() * 0.5) * aiDecisionFactor;
       racers.push(aiRacer);
     });
 
@@ -1022,53 +1053,65 @@
     const maxSpeed = baseSpeed * handlingFactor;
     const staminaDrain = Math.max(0.05, 0.25 + stats.stride / 200 - stats.endurance / 300);
 
-      const racerObj = {
-        id,
-        name,
-        color,
-        stats: deepClone(stats),
-        skills: skills.map((skill) => ({
-          ...deepClone(skill),
-          active: false,
-          timer: 0,
-          used: false
-        })),
-        modifiers: modifiers || { trainingBonus: 0, skillChanceBonus: 0 },
-        style: useStyle,
-        styleName: styleLabel,
-        isPlayer,
-        distance: 0,
-        speed: 0,
-        energy: maxEnergy,
-        maxEnergy,
-        phase: "start",
-        finished: false,
-        finishTime: null,
-        depleted: false,
-        skillLog: [],
-        rngModifier: 0,
-        mood,
-        skillToast: null,
-        energyHistory: [{ time: 0, energy: 100 }],
-        energySampleTimer: 0,
-        performance: maneuverAdjusted,
-        baseSpeed,
-        maxSpeed,
-        acceleration,
-        lane: 0,
-        passCooldown: 0,
-        strategyCooldown: 0,
-        startAggro: 0,
-        lastPhaseLogged: null,
-        baseDrain: staminaDrain,
-        fatigueThreshold: maxEnergy * 0.3,
-        finalBurst: false,
-        finalBurstTimer: 0,
-        lastPassAttempt: 0,
-        isBlocked: false,
-        lowStaminaNotified: false,
-        lastBlockDrain: 0
-      };
+    const racerObj = {
+      id,
+      name,
+      color,
+      stats: deepClone(stats),
+      skills: skills.map((skill) => ({
+        ...deepClone(skill),
+        active: false,
+        timer: 0,
+        used: false
+      })),
+      modifiers: modifiers || { trainingBonus: 0, skillChanceBonus: 0 },
+      style: useStyle,
+      styleName: styleLabel,
+      isPlayer,
+      distance: 0,
+      speed: 0,
+      energy: maxEnergy,
+      maxEnergy,
+      phase: "start",
+      finished: false,
+      finishTime: null,
+      depleted: false,
+      skillLog: [],
+      rngModifier: 0,
+      mood,
+      skillToast: null,
+      energyHistory: [{ time: 0, energy: 100 }],
+      energySampleTimer: 0,
+      performance: maneuverAdjusted,
+      baseSpeed,
+      maxSpeed,
+      acceleration,
+      lane: 0,
+      passCooldown: 0,
+      strategyCooldown: 0,
+      startAggro: 0,
+      lastPhaseLogged: null,
+      baseDrain: staminaDrain,
+      fatigueThreshold: maxEnergy * 0.3,
+      finalBurst: false,
+      finalBurstTimer: 0,
+      lastPassAttempt: 0,
+      isBlocked: false,
+      lowStaminaNotified: false,
+      lastBlockDrain: 0,
+      zoneBiasPassive: null,
+      zoneBiasPhase: null,
+      zoneBiasActive: null,
+      zoneBiasActivePhase: null,
+      staminaShieldBase: 1,
+      staminaShieldActive: 1,
+      focusDrainFactorBase: 1,
+      focusDrainFactorActive: 1,
+      insightBonusBase: 0,
+      insightBonusActive: 0,
+      zoneDecisionFactorBase: 1,
+      zoneDecisionFactorActive: 1
+    };
     applyPassiveSkills(racerObj);
     initializeZoneState(racerObj, DEFAULT_ZONE_INDEX);
     return racerObj;
@@ -1089,6 +1132,18 @@
     racer.handlingBonus = 0;
     racer.handlingPenaltyBase = 1;
     racer.handlingPenaltyActive = 1;
+    racer.zoneBiasPassive = null;
+    racer.zoneBiasPhase = null;
+    racer.zoneBiasActive = null;
+    racer.zoneBiasActivePhase = null;
+    racer.staminaShieldBase = 1;
+    racer.staminaShieldActive = 1;
+    racer.focusDrainFactorBase = 1;
+    racer.focusDrainFactorActive = 1;
+    racer.insightBonusBase = 0;
+    racer.insightBonusActive = 0;
+    racer.zoneDecisionFactorBase = 1;
+    racer.zoneDecisionFactorActive = 1;
 
     (racer.skills || []).forEach((skill) => {
       if (!skill) return;
@@ -1132,6 +1187,22 @@
       if (effect.coolRecoveryRate) {
         racer.coolRecoveryRate = Math.max(racer.coolRecoveryRate, effect.coolRecoveryRate);
       }
+      if (effect.zoneBias) {
+        racer.zoneBiasPassive = effect.zoneBias;
+        racer.zoneBiasPhase = effect.zonePhase || null;
+      }
+      if (effect.staminaShield) {
+        racer.staminaShieldBase = Math.min(racer.staminaShieldBase, effect.staminaShield);
+      }
+      if (effect.focusDrain) {
+        racer.focusDrainFactorBase *= effect.focusDrain;
+      }
+      if (effect.insightBonus) {
+        racer.insightBonusBase += effect.insightBonus;
+      }
+      if (effect.zoneDecisionFactor) {
+        racer.zoneDecisionFactorBase *= effect.zoneDecisionFactor;
+      }
 
       // Active skill defaults
       if (skill.type === "active") {
@@ -1148,6 +1219,16 @@
     racer.energyDrainFactor = Math.max(0.4, Math.min(racer.energyDrainFactor, 1.2));
     racer.slipstreamBonus = Math.max(0, Math.min(racer.slipstreamBonus, 0.12));
     racer.coolRecoveryRate = Math.max(0, Math.min(racer.coolRecoveryRate, 0.05));
+    racer.staminaShieldBase = Math.max(0.5, Math.min(racer.staminaShieldBase, 1));
+    racer.focusDrainFactorBase = Math.max(0.6, Math.min(racer.focusDrainFactorBase, 1.2));
+    racer.zoneDecisionFactorBase = Math.max(0.6, Math.min(racer.zoneDecisionFactorBase, 1.3));
+    racer.insightBonusBase = clamp(racer.insightBonusBase, 0, 0.2);
+    racer.staminaShieldActive = racer.staminaShieldBase;
+    racer.focusDrainFactorActive = racer.focusDrainFactorBase;
+    racer.zoneDecisionFactorActive = racer.zoneDecisionFactorBase;
+    racer.insightBonusActive = racer.insightBonusBase;
+    racer.zoneBiasActive = racer.zoneBiasPassive;
+    racer.zoneBiasActivePhase = racer.zoneBiasPhase;
     if (racer.handlingBonus) {
       racer.maxSpeed *= 1 + racer.handlingBonus;
     }
@@ -1396,7 +1477,9 @@
     racer.distance += (updatedSpeed * dt) / (racer.distanceMultiplier || 1);
 
     const intensity = Math.max(0.4, Math.min(1.3, updatedSpeed / Math.max(1, racer.baseSpeed)));
-    const maintainCost = racer.baseDrain * intensity * (racer.energyDrainFactor || 1) * dt;
+    const shieldFactor = racer.staminaShieldActive ?? racer.staminaShieldBase ?? 1;
+    const focusDrainFactor = racer.focusDrainFactorActive ?? racer.focusDrainFactorBase ?? 1;
+    const maintainCost = racer.baseDrain * intensity * (racer.energyDrainFactor || 1) * focusDrainFactor * shieldFactor * dt;
     spendStamina(racer, maintainCost, "maintain", race);
 
     const timeSincePass = race.time - (racer.lastPassAttempt || 0);
@@ -1454,22 +1537,54 @@
   function resolveSkillMultiplier(racer, dt) {
     let multiplier = 1;
     let handlingPenalty = racer.handlingPenaltyBase || 1;
-    if (!racer.skills) return multiplier;
-    racer.skills.forEach((skill) => {
+    let staminaShield = racer.staminaShieldBase ?? 1;
+    let focusDrain = racer.focusDrainFactorBase ?? 1;
+    let insightBonus = racer.insightBonusBase ?? 0;
+    let zoneDecisionFactor = racer.zoneDecisionFactorBase ?? 1;
+    let zoneBias = racer.zoneBiasPassive ?? null;
+    let zoneBiasPhase = racer.zoneBiasPhase ?? null;
+    const skills = racer.skills || [];
+    skills.forEach((skill) => {
       if (!skill.active) return;
       skill.timer -= dt;
       if (skill.timer > 0) {
+        const effect = skill.effect || {};
         if (typeof skill.boost === "number") {
           multiplier *= 1 + skill.boost;
         }
         if (skill.riskPenalty) {
           handlingPenalty *= 0.85;
         }
+        if (effect.staminaShield) {
+          staminaShield = Math.min(staminaShield, effect.staminaShield);
+        }
+        if (effect.focusDrain) {
+          focusDrain *= effect.focusDrain;
+        }
+        if (effect.insightBonus) {
+          insightBonus += effect.insightBonus;
+        }
+        if (effect.zoneDecisionFactor) {
+          zoneDecisionFactor *= effect.zoneDecisionFactor;
+        }
+        if (effect.zoneBias) {
+          zoneBias = effect.zoneBias;
+          zoneBiasPhase = effect.zonePhase || skill.trigger || racer.phase;
+        }
+        if (effect.staminaRegen) {
+          recoverStamina(racer, racer.maxEnergy * effect.staminaRegen * dt);
+        }
       } else {
         skill.active = false;
       }
     });
     racer.handlingPenaltyActive = handlingPenalty;
+    racer.staminaShieldActive = Math.max(0.4, Math.min(staminaShield, 1));
+    racer.focusDrainFactorActive = Math.max(0.5, Math.min(focusDrain, 1.2));
+    racer.insightBonusActive = clamp(insightBonus, 0, 0.25);
+    racer.zoneDecisionFactorActive = Math.max(0.5, Math.min(zoneDecisionFactor, 1.3));
+    racer.zoneBiasActive = zoneBias;
+    racer.zoneBiasActivePhase = zoneBiasPhase;
     return multiplier;
   }
 

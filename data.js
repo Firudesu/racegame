@@ -39,42 +39,67 @@
       type: "active",
       description: "Maintains pacing through the middle."
     },
-    {
-      name: "Second Wind",
-      trigger: "middle",
-      boost: 0.18,
-      duration: 3,
-      rarity: 2,
-      type: "active",
-      description: "Recovers energy mid race."
-    },
-    {
-      name: "Mind Focus",
-      trigger: "start",
-      boost: 0.1,
-      duration: 4,
-      rarity: 1,
-      type: "active",
-      description: "Calm start that steadies nerves."
-    },
-    {
-      name: "Resolve Breaker",
-      trigger: "final",
-      boost: 0.2,
-      duration: 4.5,
-      rarity: 2,
-      type: "active",
-      description: "Crushes opponents in final surge."
-    },
-    {
-      name: "Insight Flash",
-      trigger: "middle",
-      boost: 0.16,
-      duration: 3.5,
-      rarity: 1,
-      type: "active",
-      description: "Reads the pack and moves efficiently."
-    },
+      {
+        name: "Second Wind",
+        trigger: "middle",
+        boost: 0.18,
+        duration: 3,
+        rarity: 2,
+        type: "active",
+        description: "Recovers energy mid race.",
+        effect: { staminaRegen: 0.05 }
+      },
+      {
+        name: "Mind Focus",
+        trigger: "start",
+        boost: 0.1,
+        duration: 4,
+        rarity: 1,
+        type: "active",
+        description: "Calm start that steadies nerves."
+      },
+      {
+        name: "Resolve Breaker",
+        trigger: "final",
+        boost: 0.2,
+        duration: 4.5,
+        rarity: 2,
+        type: "active",
+        description: "Crushes opponents in final surge."
+      },
+      {
+        name: "Insight Flash",
+        trigger: "middle",
+        boost: 0.16,
+        duration: 3.5,
+        rarity: 1,
+        type: "active",
+        description: "Reads the pack and moves efficiently."
+      },
+      {
+        name: "Late Surge",
+        trigger: "final",
+        boost: 0.18,
+        duration: 3.5,
+        rarity: 3,
+        type: "active",
+        description: "Stores energy for a decisive finishing drive.",
+        effect: { staminaShield: 0.6, zoneBias: "inside", zonePhase: "final" }
+      },
+      {
+        name: "Predict Move",
+        type: "passive",
+        rarity: 3,
+        description: "Anticipates traffic and reacts quicker.",
+        effect: { predictive: true, zoneDecisionFactor: 0.75, insightBonus: 0.05 }
+      },
+      {
+        name: "Steady Focus",
+        type: "passive",
+        rarity: 2,
+        description: "Keeps a calm line and saves stamina mid-race.",
+        effect: { focusDrain: 0.85, jitterFactor: 0.8, zoneBias: "mid", zonePhase: "middle" }
+      },
     // Advanced racing skills
     {
       name: "Overtake",
@@ -302,6 +327,34 @@
 
     const performance = derivePerformance(stats);
 
+    const availableSkills = SKILL_LIBRARY.slice();
+    const assignedSkills = [];
+    const pickSkill = (filterFn) => {
+      const pool = availableSkills.filter(filterFn);
+      if (!pool.length) return null;
+      const choice = pool[Math.floor(rng() * pool.length)];
+      const idx = availableSkills.indexOf(choice);
+      if (idx >= 0) {
+        availableSkills.splice(idx, 1);
+      }
+      return deepClone(choice);
+    };
+
+    let primarySkill = pickSkill((skill) => skill.type === "active");
+    if (!primarySkill) {
+      primarySkill = pickSkill(() => true);
+    }
+    if (primarySkill) {
+      assignedSkills.push(primarySkill);
+    }
+
+    if (rng() < 0.4) {
+      const secondary = pickSkill(() => true);
+      if (secondary) {
+        assignedSkills.push(secondary);
+      }
+    }
+
     return {
       name: `AI-${index + 1}`,
       color: colors[index % colors.length],
@@ -309,7 +362,7 @@
       style: style.label,
       styleKey: style.key,
       styleName: style.label,
-      skills: rng() < 0.5 ? [deepClone(SKILL_LIBRARY[Math.floor(rng() * SKILL_LIBRARY.length)])] : [],
+      skills: assignedSkills,
       modifiers: { trainingBonus: 0, skillChanceBonus: 0 },
       mood: clamp(Math.round(65 + (rng() - 0.5) * 30), 40, 95),
       performance
