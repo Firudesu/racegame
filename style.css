@@ -89,6 +89,12 @@ body {
   margin-bottom: 4px;
 }
 
+.avatar-style {
+  color: var(--muted);
+  margin-bottom: 4px;
+  font-size: 0.95rem;
+}
+
 .legacy-flag {
   font-size: 0.9rem;
   color: var(--success);

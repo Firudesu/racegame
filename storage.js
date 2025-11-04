@@ -47,6 +47,10 @@
         entry.mood = 75;
         mutated = true;
       }
+      if (!entry.style && entry.styleName) {
+        entry.style = entry.styleName;
+        mutated = true;
+      }
       return entry;
     });
 
@@ -65,6 +69,9 @@
     }
     if (typeof entry.mood !== "number") {
       entry.mood = 75;
+    }
+    if (!entry.style && entry.styleName) {
+      entry.style = entry.styleName;
     }
 
     const existingIndex = records.findIndex((item) => item.id === entry.id);

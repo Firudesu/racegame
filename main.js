@@ -11,13 +11,16 @@
     createSeededRng,
     pickRandomSkill,
     createBaseAvatar,
-    createAIRacer
+    createAIRacer,
+    RACING_STYLES,
+    derivePerformance
   } = Data;
 
   const elements = {
     tokenId: document.getElementById("token-id"),
     avatarName: document.getElementById("avatar-name"),
     sessions: document.getElementById("avatar-sessions"),
+    avatarStyle: document.getElementById("avatar-style"),
     legacyFlag: document.getElementById("legacy-flag"),
     skillList: document.getElementById("skill-list"),
     legacyList: document.getElementById("legacy-list"),
@@ -101,6 +104,16 @@
 
   const TRAINING_BASE_GAIN = 8;
   const TRACK_STEP = 1 / 20;
+  const LANE_COUNT = 5;
+  const LANE_SPACING = 14;
+  const PASS_DISTANCE_THRESHOLD = 24;
+  const PASS_COOLDOWN = 1.2;
+  const STYLE_PHASE_MAP = Object.fromEntries(
+    Object.entries(RACING_STYLES).map(([key, def]) => [key, def.phaseBonus])
+  );
+  const STYLE_MANEUVER_ADJUST = Object.fromEntries(
+    Object.entries(RACING_STYLES).map(([key, def]) => [key, def.maneuverModifier || 0])
+  );
 
   init();
 
@@ -199,6 +212,9 @@
     elements.tokenId.textContent = state.tokenId;
     elements.avatarName.textContent = state.avatar.name;
     elements.sessions.textContent = state.avatar.sessions;
+    if (elements.avatarStyle) {
+      elements.avatarStyle.textContent = state.avatar.style;
+    }
     elements.legacyFlag.textContent = state.avatar.legacy ? "Legacy boosted" : "";
 
     Object.entries(state.avatar.stats).forEach(([stat, value]) => {
@@ -223,8 +239,12 @@
       state.avatar.mood = 75;
     }
 
-    if (!state.avatar.version || state.avatar.version < 2) {
-      state.avatar.version = 2;
+    if (!state.avatar.style || !RACING_STYLES[state.avatar.style]) {
+      state.avatar.style = "Pacer";
+    }
+
+    if (!state.avatar.version || state.avatar.version < 3) {
+      state.avatar.version = 3;
     }
 
     Storage.saveCurrentAvatar(state.avatar);
@@ -280,6 +300,7 @@
           <span class="legacy-meta">${retiredAt}</span>
         </header>
         <div class="legacy-meta">Token ${entry.tokenId} • Mood ${entry.mood ?? 0}%</div>
+        <div class="legacy-meta">Style: ${entry.style || entry.styleName || "Unknown"}</div>
         <div class="legacy-meta">Skills: ${skillPreview}</div>
         <div class="legacy-actions">
           <button data-action="revive" data-id="${entry.id}" class="secondary">Revive</button>
@@ -314,6 +335,7 @@
 
     const nextAvatar = createBaseAvatar({ legacyBonus: true, legacyData: record });
     state.avatar = nextAvatar;
+    state.avatar.style = record.style || record.styleName || state.avatar.style || "Pacer";
     state.tokenId = generateTokenId();
     state.trainingLog = [];
     state.lastTrainedStat = null;
@@ -478,7 +500,8 @@
       skills: deepClone(state.avatar.skills),
       tokenId: state.tokenId,
       retiredAt: Date.now(),
-      mood: state.avatar.mood
+      mood: state.avatar.mood,
+      style: state.avatar.style
     };
 
     state.legacyRecords = Storage.addLegacyRecord(record);
@@ -529,6 +552,128 @@
     return after - before;
   }
 
+  function derivePerformanceBundle(stats) {
+    return derivePerformance(stats);
+  }
+
+  function applyStyleAdjustments(performance, style) {
+    const adjusted = {
+      speed: performance.speed,
+      handling: performance.handling,
+      maneuver: performance.maneuver
+    };
+    const modifier = STYLE_MANEUVER_ADJUST[style] || 0;
+    if (modifier) {
+      adjusted.maneuver = clamp(Math.round(adjusted.maneuver * (1 + modifier)), 0, 100);
+    }
+    return adjusted;
+  }
+
+  function getStylePhaseMultiplier(style, phase) {
+    const map = STYLE_PHASE_MAP[style];
+    if (!map) return 1;
+    const bonus = map[phase] ?? 0;
+    return 1 + bonus;
+  }
+
+  function laneOffset(lane) {
+    return (lane - (LANE_COUNT - 1) / 2) * LANE_SPACING;
+  }
+
+  function assignInitialLanes(racers) {
+    const centerLane = Math.floor(LANE_COUNT / 2);
+    let seed = 0;
+    racers.forEach((racer) => {
+      if (racer.isPlayer) {
+        racer.lane = centerLane;
+      }
+    });
+
+    racers.forEach((racer) => {
+      if (racer.isPlayer) return;
+      let lane = seed % LANE_COUNT;
+      if (lane === centerLane) {
+        lane = (lane + 1) % LANE_COUNT;
+      }
+      racer.lane = lane;
+      seed += 1;
+    });
+  }
+
+  function handlePassing(race, dt) {
+    const active = race.racers.filter((r) => !r.finished);
+    const laneGroups = new Map();
+
+    active.forEach((racer) => {
+      racer.passCooldown = Math.max(0, (racer.passCooldown || 0) - dt);
+      const laneList = laneGroups.get(racer.lane) || [];
+      laneList.push(racer);
+      laneGroups.set(racer.lane, laneList);
+    });
+
+    laneGroups.forEach((group) => {
+      group.sort((a, b) => b.distance - a.distance);
+      for (let i = 0; i < group.length - 1; i += 1) {
+        const ahead = group[i];
+        const behind = group[i + 1];
+        if (behind.passCooldown > 0) continue;
+        const gap = (ahead.distance - behind.distance + TRACK_LENGTH) % TRACK_LENGTH;
+        if (gap <= 0 || gap > PASS_DISTANCE_THRESHOLD) continue;
+        attemptPass(behind, ahead, race);
+      }
+    });
+  }
+
+  function attemptPass(behind, ahead, race) {
+    const racerStyle = behind.style || "Pacer";
+    const passChance = clamp(behind.performance.maneuver / 100, 0.05, 0.99);
+    const maneuverAdvantage = behind.performance.maneuver >= ahead.performance.maneuver + 2;
+    const speedAdvantage = behind.performance.speed >= ahead.performance.speed + 2;
+    const roll = race.rng();
+    const success = maneuverAdvantage || speedAdvantage || roll < passChance;
+
+    behind.passCooldown = PASS_COOLDOWN;
+
+    if (success) {
+      const offsets = [];
+      if (behind.lane < LANE_COUNT - 1) offsets.push(behind.lane + 1);
+      if (behind.lane > 0) offsets.push(behind.lane - 1);
+      let chosenLane = behind.lane;
+      if (offsets.length) {
+        chosenLane =
+          offsets.find(
+            (lane) =>
+              !race.racers.some(
+                (r) =>
+                  r !== behind &&
+                  !r.finished &&
+                  r.lane === lane &&
+                  Math.min(
+                    Math.abs(r.distance - behind.distance),
+                    TRACK_LENGTH - Math.abs(r.distance - behind.distance)
+                  ) < 5
+              )
+          ) ?? offsets[0];
+      }
+        behind.lane = chosenLane;
+        behind.distance += 1;
+      behind.passCooldown = PASS_COOLDOWN;
+      console.log(
+        `%cPass Success%c ${behind.name} (${racerStyle}) moved to lane ${behind.lane}`,
+        "color:#58d68d; font-weight:bold;",
+        "color:#d0d3e8"
+      );
+    } else {
+      const slowdown = 0.95 - race.rng() * 0.05;
+      behind.speed *= slowdown;
+      console.log(
+        `%cPass Blocked%c ${behind.name} (${racerStyle}) slowed (${(slowdown * 100).toFixed(0)}%)`,
+        "color:#f85149; font-weight:bold;",
+        "color:#d0d3e8"
+      );
+    }
+  }
+
   function startRace(isReplay) {
     if (state.race && state.race.running) {
       return;
@@ -548,6 +693,10 @@
     state.race.countdownLabel = "3";
     state.race.countdownFlashTimer = 0;
     playSfx("countdown");
+    if (!state.race.loggedRoster) {
+      logRaceRoster(state.race);
+      state.race.loggedRoster = true;
+    }
     const playerRacer = state.race.racers.find((r) => r.isPlayer);
     updateHud(playerRacer, state.race);
     drawRace(state.race);
@@ -565,13 +714,15 @@
     return {
       seed,
       aiBlueprints,
-      playerSnapshot: {
-        name: state.avatar.name,
-        stats: deepClone(state.avatar.stats),
-        skills: deepClone(state.avatar.skills),
-        modifiers: deepClone(state.avatar.modifiers || { trainingBonus: 0, skillChanceBonus: 0 }),
-        mood: state.avatar.mood
-      }
+        playerSnapshot: {
+          name: state.avatar.name,
+          stats: deepClone(state.avatar.stats),
+          skills: deepClone(state.avatar.skills),
+          modifiers: deepClone(state.avatar.modifiers || { trainingBonus: 0, skillChanceBonus: 0 }),
+          mood: state.avatar.mood,
+          style: state.avatar.style,
+          performance: derivePerformanceBundle(state.avatar.stats)
+        }
     };
   }
 
@@ -587,9 +738,9 @@
       skills: config.playerSnapshot.skills,
       modifiers: config.playerSnapshot.modifiers,
       isPlayer: true,
-      phaseMultipliers: { start: 1, middle: 1, final: 1 },
-      styleKey: "player",
-      mood: config.playerSnapshot.mood
+      style: config.playerSnapshot.style || "Pacer",
+      mood: config.playerSnapshot.mood,
+      performance: config.playerSnapshot.performance
     });
     racers.push(player);
 
@@ -603,13 +754,15 @@
           skills: blueprint.skills,
           modifiers: blueprint.modifiers,
           isPlayer: false,
-          phaseMultipliers: blueprint.phaseMultipliers,
-          styleKey: blueprint.styleKey,
+          style: blueprint.style || blueprint.styleName || "Pacer",
           styleName: blueprint.styleName,
-          mood: blueprint.mood
+          mood: blueprint.mood,
+          performance: blueprint.performance
         })
       );
     });
+
+    assignInitialLanes(racers);
 
     return {
       seed: config.seed,
@@ -628,7 +781,9 @@
       animationId: null,
       aiBlueprints: deepClone(config.aiBlueprints),
       playerSnapshot: deepClone(config.playerSnapshot),
-      leaderboard: racers.slice()
+      leaderboard: racers.slice(),
+      debugPhase: null,
+      loggedRoster: false
     };
   }
 
@@ -640,12 +795,21 @@
     skills,
     modifiers,
     isPlayer,
-    phaseMultipliers,
-    styleKey,
+    style,
     styleName,
-    mood
+    mood,
+    performance
   }) {
     const maxEnergy = stats.endurance * 10;
+    const useStyle = style || "Pacer";
+    const styleLabel = styleName || useStyle;
+    const perf = performance ? { ...performance } : derivePerformanceBundle(stats, useStyle);
+    const maneuverAdjusted = applyStyleAdjustments(perf, useStyle);
+    const baseSpeed = Math.max(4, 3.2 + maneuverAdjusted.speed * 0.05);
+    const acceleration = 4 + maneuverAdjusted.speed * 0.04;
+    const handlingFactor = 1 + maneuverAdjusted.handling / 220;
+    const maxSpeed = baseSpeed * handlingFactor;
+
     return {
       id,
       name,
@@ -658,9 +822,8 @@
         used: false
       })),
       modifiers: modifiers || { trainingBonus: 0, skillChanceBonus: 0 },
-      phaseMultipliers: deepClone(phaseMultipliers || { start: 1, middle: 1, final: 1 }),
-      styleKey,
-      styleName,
+      style: useStyle,
+      styleName: styleLabel,
       isPlayer,
       distance: 0,
       speed: 0,
@@ -675,7 +838,14 @@
       mood,
       skillToast: null,
       energyHistory: [{ time: 0, energy: 100 }],
-      energySampleTimer: 0
+      energySampleTimer: 0,
+      performance: maneuverAdjusted,
+      baseSpeed,
+      maxSpeed,
+      acceleration,
+      lane: 0,
+      passCooldown: 0,
+      lastPhaseLogged: null
     };
   }
 
@@ -737,6 +907,27 @@
     }
   }
 
+  function logRaceRoster(race) {
+    if (!console.table) {
+      race.racers.forEach((racer) => {
+        console.log(
+          `${racer.name} | Style ${racer.style} | Lane ${racer.lane} | Speed ${racer.performance.speed} | Handling ${racer.performance.handling} | Maneuver ${racer.performance.maneuver}`
+        );
+      });
+      return;
+    }
+
+    const summary = race.racers.map((racer) => ({
+      Name: racer.name,
+      Style: racer.style,
+      Lane: racer.lane,
+      Speed: racer.performance.speed,
+      Handling: racer.performance.handling,
+      Maneuver: racer.performance.maneuver
+    }));
+    console.table(summary);
+  }
+
   function updateRace(dt) {
     const race = state.race;
     if (!race || !race.running) return;
@@ -757,6 +948,8 @@
       }
     });
 
+    handlePassing(race, dt);
+
     updateLeaderboard(race);
     updateHud(player, race);
 
@@ -773,16 +966,16 @@
       }
     }
 
-    const progress = racer.distance / TRACK_LENGTH;
-    const phase = progress < 0.3 ? "start" : progress < 0.8 ? "middle" : "final";
+    const progress = (racer.distance % TRACK_LENGTH) / TRACK_LENGTH;
+    const phase = progress < 0.25 ? "start" : progress < 0.75 ? "middle" : "final";
 
     if (phase !== racer.phase) {
       racer.phase = phase;
       maybeTriggerSkills(racer, phase, race);
     }
 
-    const baseSpeed = racer.stats.stride * 0.12 + racer.stats.force * 0.04;
-    const phaseMultiplier = racer.phaseMultipliers[phase] || 1;
+    const baseSpeed = racer.baseSpeed;
+    const styleMultiplier = getStylePhaseMultiplier(racer.style, phase);
     const energyFactor = Math.max(0.4, racer.energy / racer.maxEnergy);
     const skillMultiplier = resolveSkillMultiplier(racer, dt);
     const resolveBoost = phase === "final" && racer.stats.resolve > 40 ? 1 + (racer.stats.resolve - 40) * 0.005 : 1;
@@ -790,9 +983,9 @@
     const moodMultiplier = 1 + (moodPercent - 70) * 0.0015;
     const rngJitter = 1 + (race.rng() - 0.5) * 0.06 + racer.rngModifier;
 
-    let speed =
+    let targetSpeed =
       baseSpeed *
-      phaseMultiplier *
+      styleMultiplier *
       energyFactor *
       skillMultiplier *
       resolveBoost *
@@ -800,14 +993,27 @@
       rngJitter;
 
     if (racer.energy <= 0) {
-      speed *= 0.6;
+      targetSpeed *= 0.6;
       racer.depleted = true;
     }
 
-    racer.speed = speed;
-    racer.distance += speed * dt;
+    const currentSpeed = racer.speed || 0;
+    const speedDelta = targetSpeed - currentSpeed;
+    let updatedSpeed = currentSpeed;
+    if (speedDelta > 0) {
+      updatedSpeed = currentSpeed + Math.min(speedDelta, racer.acceleration * dt);
+    } else {
+      updatedSpeed = currentSpeed + Math.max(speedDelta, -racer.acceleration * 0.7 * dt);
+    }
+    updatedSpeed = Math.min(updatedSpeed, racer.maxSpeed);
+    if (!Number.isFinite(updatedSpeed) || updatedSpeed < 0) {
+      updatedSpeed = Math.max(0, targetSpeed);
+    }
 
-    const energyCost = speed * 0.1 * dt;
+    racer.speed = updatedSpeed;
+    racer.distance += updatedSpeed * dt;
+
+    const energyCost = updatedSpeed * 0.1 * dt;
     racer.energy = Math.max(0, racer.energy - energyCost);
 
     racer.energySampleTimer += dt;
@@ -828,10 +1034,12 @@
       chance += (moodPercent - 50) * 0.002;
 
       if (!racer.isPlayer) {
-        if (racer.styleKey === "lead" && phase === "start") {
+        if (racer.style === "Leader" && phase === "start") {
           chance += 0.1;
-        } else if (racer.styleKey === "late" && phase === "final") {
+        } else if (racer.style === "Chaser" && phase === "final") {
           chance += 0.2;
+        } else if (racer.style === "Sprinter" && phase === "final") {
+          chance += 0.15;
         }
       }
 
@@ -873,7 +1081,8 @@
   function updateHud(player, race) {
     if (!player) return;
 
-    elements.hudPhase.textContent = capitalize(player.phase);
+    const phaseLabel = capitalize(player.phase);
+    elements.hudPhase.textContent = `${phaseLabel} · ${player.style}`;
     elements.hudTimer.textContent = race.time.toFixed(1);
 
     const rank = race.leaderboard.findIndex((r) => r.id === player.id) + 1;
@@ -889,6 +1098,11 @@
       pill.textContent = skill.name;
       elements.hudSkills.appendChild(pill);
     });
+
+    if (race && race.debugPhase !== player.phase) {
+      console.log(`[Phase] Player now in ${phaseLabel.toUpperCase()} phase (${player.style})`);
+      race.debugPhase = player.phase;
+    }
   }
 
   function concludeRace() {
@@ -932,10 +1146,12 @@
         ? racer.skillLog.map((s) => s.name).join(", ")
         : "None";
 
+      const roleLabel = racer.isPlayer ? "Player" : "AI";
+      const styleName = racer.style || racer.styleName || "--";
       div.innerHTML = `
         <div>
           <strong>${index + 1}. ${racer.name}</strong><br/>
-          <small>${racer.isPlayer ? "Player" : racer.styleName || "AI"}</small>
+          <small>${roleLabel} • ${styleName}</small>
         </div>
         <div>
           <div>${timeLabel}</div>
@@ -1060,19 +1276,19 @@
 
   function drawRacer(racer, width, height) {
     const pos = positionFromDistance(racer.distance, width, height);
-    const radius = 10;
+    const laneY = laneOffset(racer.lane);
+    const carWidth = 28;
+    const carHeight = 12;
+    const rectX = pos.x - carWidth / 2;
+    const rectY = pos.y + laneY - carHeight / 2;
 
     ctx.fillStyle = racer.color;
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(rectX, rectY, carWidth, carHeight);
 
     if (racer.skills.some((skill) => skill.active)) {
       ctx.strokeStyle = "rgba(255,255,255,0.6)";
       ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, radius + 4, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.strokeRect(rectX - 2, rectY - 2, carWidth + 4, carHeight + 4);
     }
 
     if (racer.skillToast) {
@@ -1080,23 +1296,25 @@
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.fillStyle = "rgba(12, 16, 24, 0.85)";
-      const toastWidth = 96;
+      const toastWidth = 110;
       const toastHeight = 20;
-      ctx.fillRect(pos.x - toastWidth / 2, pos.y - radius - 30, toastWidth, toastHeight);
+      const toastX = pos.x - toastWidth / 2;
+      const toastY = rectY - 26;
+      ctx.fillRect(toastX, toastY, toastWidth, toastHeight);
       ctx.strokeStyle = "rgba(90, 200, 250, 0.6)";
       ctx.lineWidth = 1;
-      ctx.strokeRect(pos.x - toastWidth / 2, pos.y - radius - 30, toastWidth, toastHeight);
+      ctx.strokeRect(toastX, toastY, toastWidth, toastHeight);
       ctx.fillStyle = "#5ac8fa";
       ctx.font = "11px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(racer.skillToast.name, pos.x, pos.y - radius - 16);
+      ctx.fillText(racer.skillToast.name, pos.x, toastY + 14);
       ctx.restore();
     }
 
     ctx.fillStyle = "#ffffff";
-    ctx.font = "12px sans-serif";
+    ctx.font = "11px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(racer.name, pos.x, pos.y - 16);
+    ctx.fillText(racer.name, pos.x, rectY - 6);
   }
 
   function drawLeaderboardOverlay(race, width, height) {
@@ -1115,10 +1333,11 @@
 
     race.leaderboard.slice(0, 4).forEach((racer, index) => {
       const lineY = y + 38 + index * 20;
-      const prefix = `${index + 1}. ${racer.name}`;
+      const styleTag = racer.style ? racer.style.charAt(0) : "-";
+      const prefix = `${index + 1}. ${racer.name} [${styleTag}]`;
       const suffix = racer.finished
         ? `${racer.finishTime.toFixed(1)}s`
-        : `${Math.min(100, Math.round((racer.distance / TRACK_LENGTH) * 100))}%`;
+        : `${Math.min(100, Math.round((racer.distance / TRACK_LENGTH) * 100))}% · L${racer.lane}`;
       ctx.fillStyle = racer.isPlayer ? "#5ac8fa" : "#dddddd";
       ctx.fillText(prefix, x + 12, lineY);
       ctx.textAlign = "right";

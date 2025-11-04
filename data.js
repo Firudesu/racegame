@@ -13,13 +13,34 @@
     { name: "Insight Flash", trigger: "middle", boost: 0.16, duration: 3.5 }
   ];
 
-  const AI_STYLES = {
-    lead: { name: "Front Runner", multipliers: { start: 1.1, middle: 0.95, final: 0.9 } },
-    steady: { name: "Steady Pace", multipliers: { start: 1, middle: 1, final: 1 } },
-    late: { name: "Closer", multipliers: { start: 0.9, middle: 1, final: 1.1 } }
+  const RACING_STYLES = {
+    Leader: {
+      key: "Leader",
+      label: "Leader",
+      phaseBonus: { start: 0.1, middle: 0, final: -0.1 },
+      maneuverModifier: -0.1
+    },
+    Pacer: {
+      key: "Pacer",
+      label: "Pacer",
+      phaseBonus: { start: 0.05, middle: 0.05, final: -0.05 },
+      maneuverModifier: 0
+    },
+    Chaser: {
+      key: "Chaser",
+      label: "Chaser",
+      phaseBonus: { start: -0.05, middle: 0.1, final: 0.05 },
+      maneuverModifier: 0.1
+    },
+    Sprinter: {
+      key: "Sprinter",
+      label: "Sprinter",
+      phaseBonus: { start: -0.1, middle: 0, final: 0.15 },
+      maneuverModifier: 0.15
+    }
   };
 
-  const STYLE_KEYS = Object.keys(AI_STYLES);
+  const STYLE_KEYS = Object.keys(RACING_STYLES);
 
   function randomName() {
     const prefixes = ["A", "B", "C", "D", "E", "F", "G", "H"];
@@ -87,7 +108,7 @@
       modifiers,
       legacy: legacyBonus,
       createdAt: Date.now(),
-      version: 2
+      version: 3
     };
   }
 
@@ -108,32 +129,43 @@
     });
 
     const styleKey = STYLE_KEYS[Math.floor(rng() * STYLE_KEYS.length)];
-    const style = AI_STYLES[styleKey];
+    const style = RACING_STYLES[styleKey];
 
     const colors = ["#ef5350", "#fbc02d", "#ab47bc"];
+
+    const performance = derivePerformance(stats);
 
     return {
       name: `AI-${index + 1}`,
       color: colors[index % colors.length],
       stats,
-      styleKey,
-      styleName: style.name,
-      phaseMultipliers: deepClone(style.multipliers),
+      style: style.label,
+      styleKey: style.key,
+      styleName: style.label,
       skills: rng() < 0.5 ? [deepClone(SKILL_LIBRARY[Math.floor(rng() * SKILL_LIBRARY.length)])] : [],
       modifiers: { trainingBonus: 0, skillChanceBonus: 0 },
-      mood: clamp(Math.round(65 + (rng() - 0.5) * 30), 40, 95)
+      mood: clamp(Math.round(65 + (rng() - 0.5) * 30), 40, 95),
+      performance
     };
+  }
+
+  function derivePerformance(stats) {
+    const speed = clamp(Math.round(stats.stride * 0.65 + stats.force * 0.35), 25, 100);
+    const handling = clamp(Math.round(stats.resolve * 0.45 + stats.insight * 0.55), 25, 100);
+    const maneuver = clamp(Math.round(stats.force * 0.4 + stats.insight * 0.6), 25, 100);
+    return { speed, handling, maneuver };
   }
 
   window.ProjectStrideData = {
     TRACK_LENGTH,
     SKILL_LIBRARY,
-    AI_STYLES,
+    RACING_STYLES,
     clamp,
     deepClone,
     createSeededRng,
     pickRandomSkill,
     createBaseAvatar,
-    createAIRacer
+    createAIRacer,
+    derivePerformance
   };
 })();
