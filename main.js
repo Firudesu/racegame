@@ -104,8 +104,16 @@
 
   const TRAINING_BASE_GAIN = 8;
   const TRACK_STEP = 1 / 20;
-  const LANE_COUNT = 5;
-  const LANE_SPACING = 14;
+
+  const TRACK_ZONES = [
+    { key: "inside", display: "Inside Track", radiusOffset: -24, distanceMultiplier: 0.98 },
+    { key: "mid", display: "Mid Track", radiusOffset: 0, distanceMultiplier: 1 },
+    { key: "outside", display: "Outside Track", radiusOffset: 24, distanceMultiplier: 1.03 }
+  ];
+
+  const ZONE_COUNT = TRACK_ZONES.length;
+  const LANE_COUNT = ZONE_COUNT;
+  const ZONE_CHANGE_RATE = 2.6;
   const PASS_DISTANCE_THRESHOLD = 24;
   const PASS_COOLDOWN = 1.2;
   const STYLE_PHASE_MAP = Object.fromEntries(
@@ -593,27 +601,54 @@
     return 1 + bonus;
   }
 
-  function laneOffset(lane) {
-    return (lane - (LANE_COUNT - 1) / 2) * LANE_SPACING;
+  function initializeZoneState(racer, zoneIndex = Math.floor(ZONE_COUNT / 2)) {
+    const idx = Math.max(0, Math.min(ZONE_COUNT - 1, zoneIndex));
+    const zone = TRACK_ZONES[idx];
+    racer.zoneIndex = idx;
+    racer.targetZone = idx;
+    racer.zoneBlend = 0;
+    racer.zoneOffset = zone.radiusOffset;
+    racer.distanceMultiplier = zone.distanceMultiplier;
+    racer.lane = idx;
+  }
+
+  function updateZoneState(racer, dt) {
+    if (racer.zoneIndex == null) {
+      initializeZoneState(racer);
+    }
+    if (racer.targetZone == null) {
+      racer.targetZone = racer.zoneIndex;
+    }
+    racer.targetZone = Math.round(Math.max(0, Math.min(ZONE_COUNT - 1, racer.targetZone)));
+
+    if (racer.zoneIndex === racer.targetZone) {
+      const zone = TRACK_ZONES[racer.zoneIndex] || TRACK_ZONES[Math.floor(ZONE_COUNT / 2)];
+      racer.zoneOffset = zone.radiusOffset;
+      racer.distanceMultiplier = zone.distanceMultiplier;
+      racer.zoneBlend = 0;
+    } else {
+      const fromZone = TRACK_ZONES[racer.zoneIndex] || TRACK_ZONES[0];
+      const toZone = TRACK_ZONES[racer.targetZone] || TRACK_ZONES[TRACK_ZONES.length - 1];
+      racer.zoneBlend = Math.min(1, (racer.zoneBlend || 0) + ZONE_CHANGE_RATE * dt);
+      racer.zoneOffset = lerp(fromZone.radiusOffset, toZone.radiusOffset, racer.zoneBlend);
+      racer.distanceMultiplier = lerp(fromZone.distanceMultiplier, toZone.distanceMultiplier, racer.zoneBlend);
+      if (racer.zoneBlend >= 1 - 1e-3) {
+        racer.zoneIndex = racer.targetZone;
+        racer.zoneBlend = 0;
+        racer.zoneOffset = toZone.radiusOffset;
+        racer.distanceMultiplier = toZone.distanceMultiplier;
+      }
+    }
+
+    racer.lane = Math.max(0, Math.min(ZONE_COUNT - 1, Math.round(racer.zoneIndex)));
   }
 
   function assignInitialLanes(racers) {
-    const centerLane = Math.floor(LANE_COUNT / 2);
-    let seed = 0;
+    const center = Math.floor(ZONE_COUNT / 2);
+    let cursor = 0;
     racers.forEach((racer) => {
-      if (racer.isPlayer) {
-        racer.lane = centerLane;
-      }
-    });
-
-    racers.forEach((racer) => {
-      if (racer.isPlayer) return;
-      let lane = seed % LANE_COUNT;
-      if (lane === centerLane) {
-        lane = (lane + 1) % LANE_COUNT;
-      }
-      racer.lane = lane;
-      seed += 1;
+      const zone = racer.isPlayer ? center : cursor++ % ZONE_COUNT;
+      initializeZoneState(racer, zone);
     });
   }
 
@@ -700,8 +735,15 @@
               )
           ) ?? offsets[0];
       }
-        behind.lane = chosenLane;
-        behind.distance += 1;
+      behind.targetZone = chosenLane;
+      behind.zoneIndex = chosenLane;
+      const zoneInfo = TRACK_ZONES[chosenLane];
+      if (zoneInfo) {
+        behind.zoneOffset = zoneInfo.radiusOffset;
+        behind.distanceMultiplier = zoneInfo.distanceMultiplier;
+      }
+      behind.lane = chosenLane;
+      behind.distance += 1;
       behind.passCooldown = cooldown;
       console.log(
         `%cPass Success%c ${behind.name} (${racerStyle}) moved to lane ${behind.lane}`,
@@ -897,6 +939,7 @@
       lastPhaseLogged: null
     };
     applyPassiveSkills(racerObj);
+    initializeZoneState(racerObj, Math.floor(ZONE_COUNT / 2));
     return racerObj;
   }
 
@@ -986,9 +1029,10 @@
     let bonus = 1;
     const threshold = 30;
     race.racers.forEach((other) => {
-      if (other === racer || other.finished || other.lane !== racer.lane) return;
+      if (other === racer || other.finished) return;
       const delta = (other.distance - racer.distance + TRACK_LENGTH) % TRACK_LENGTH;
-      if (delta > 0 && delta < threshold) {
+      const zoneSeparation = Math.abs((other.zoneOffset || 0) - (racer.zoneOffset || 0));
+      if (delta > 0 && delta < threshold && zoneSeparation <= 28) {
         const scaled = 1 + racer.slipstreamBonus * (1 - delta / threshold);
         bonus = Math.max(bonus, scaled);
       }
@@ -1067,7 +1111,7 @@
     const summary = race.racers.map((racer) => ({
       Name: racer.name,
       Style: racer.style,
-      Lane: racer.lane,
+      Zone: TRACK_ZONES[Math.max(0, Math.min(TRACK_ZONES.length - 1, racer.zoneIndex ?? 1))]?.display || "Mid Track",
       Speed: racer.performance.speed,
       Handling: racer.performance.handling,
       Maneuver: racer.performance.maneuver
@@ -1112,6 +1156,8 @@
         racer.skillToast = null;
       }
     }
+
+    updateZoneState(racer, dt);
 
     const progress = (racer.distance % TRACK_LENGTH) / TRACK_LENGTH;
     const phase = progress < 0.25 ? "start" : progress < 0.75 ? "middle" : "final";
@@ -1162,7 +1208,7 @@
     }
 
     racer.speed = updatedSpeed;
-    racer.distance += updatedSpeed * dt;
+    racer.distance += (updatedSpeed * dt) / (racer.distanceMultiplier || 1);
 
     const energyCost = updatedSpeed * 0.1 * dt * (racer.energyDrainFactor || 1);
     racer.energy = Math.max(0, racer.energy - energyCost);
@@ -1441,12 +1487,11 @@
   }
 
   function drawRacer(racer, width, height) {
-    const pos = positionFromDistance(racer.distance, width, height);
-    const laneY = laneOffset(racer.lane);
+    const pos = positionFromDistance(racer.distance, width, height, racer.zoneOffset || 0);
     const carWidth = 28;
     const carHeight = 12;
     const rectX = pos.x - carWidth / 2;
-    const rectY = pos.y + laneY - carHeight / 2;
+    const rectY = pos.y - carHeight / 2;
 
     ctx.fillStyle = racer.color;
     ctx.fillRect(rectX, rectY, carWidth, carHeight);
@@ -1501,9 +1546,11 @@
       const lineY = y + 38 + index * 20;
       const styleTag = racer.style ? racer.style.charAt(0) : "-";
       const prefix = `${index + 1}. ${racer.name} [${styleTag}]`;
+      const zoneInfo = TRACK_ZONES[Math.max(0, Math.min(TRACK_ZONES.length - 1, racer.zoneIndex ?? 1))];
+      const zoneLabel = zoneInfo ? zoneInfo.display : "Mid Track";
       const suffix = racer.finished
         ? `${racer.finishTime.toFixed(1)}s`
-        : `${Math.min(100, Math.round((racer.distance / TRACK_LENGTH) * 100))}% · L${racer.lane}`;
+        : `${Math.min(100, Math.round((racer.distance / TRACK_LENGTH) * 100))}% · ${zoneLabel}`;
       ctx.fillStyle = racer.isPlayer ? "#5ac8fa" : "#dddddd";
       ctx.fillText(prefix, x + 12, lineY);
       ctx.textAlign = "right";
@@ -1512,7 +1559,7 @@
     });
   }
 
-  function positionFromDistance(distance, width, height) {
+  function positionFromDistance(distance, width, height, offset = 0) {
     const progress = (distance % TRACK_LENGTH) / TRACK_LENGTH;
     const theta = -Math.PI / 2 + progress * Math.PI * 2;
     const cx = width / 2;
@@ -1520,10 +1567,27 @@
     const a = width * 0.37;
     const b = height * 0.32;
 
+    const baseX = cx + Math.cos(theta) * a;
+    const baseY = cy + Math.sin(theta) * b;
+
+    if (!offset) {
+      return { x: baseX, y: baseY };
+    }
+
+    const normalX = Math.cos(theta) / a;
+    const normalY = Math.sin(theta) / b;
+    const normalLength = Math.hypot(normalX, normalY) || 1;
+    const offsetX = (normalX / normalLength) * offset;
+    const offsetY = (normalY / normalLength) * offset;
+
     return {
-      x: cx + Math.cos(theta) * a,
-      y: cy + Math.sin(theta) * b
+      x: baseX + offsetX,
+      y: baseY + offsetY
     };
+  }
+
+  function lerp(a, b, t) {
+    return a + (b - a) * Math.max(0, Math.min(1, t));
   }
 
   function capitalize(word) {
