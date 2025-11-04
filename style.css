@@ -1,0 +1,511 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", sans-serif;
+  --bg: #0e1017;
+  --panel: #171b26;
+  --accent: #5ac8fa;
+  --accent-strong: #1f9ce6;
+  --danger: #f85149;
+  --text: #f5f7ff;
+  --muted: #8c92a1;
+  --success: #58d68d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #1a2233, var(--bg));
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+}
+
+#app {
+  width: min(1200px, 95vw);
+  margin: 24px auto;
+  background: rgba(20, 24, 35, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 28px;
+  background: linear-gradient(90deg, rgba(90, 200, 250, 0.12), transparent);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.top-bar h1 {
+  margin: 0;
+  font-size: 1.8rem;
+}
+
+.token-info {
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 0;
+  min-height: 700px;
+}
+
+.sidebar {
+  background: rgba(10, 12, 18, 0.6);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sidebar h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+}
+
+.avatar-name {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.avatar-sessions {
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.avatar-style {
+  color: var(--muted);
+  margin-bottom: 4px;
+  font-size: 0.95rem;
+}
+
+.legacy-flag {
+  font-size: 0.9rem;
+  color: var(--success);
+  min-height: 1rem;
+}
+
+.stats .stat {
+  margin-bottom: 12px;
+}
+
+.stats .stat span {
+  display: block;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+.stat-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-bar .bar {
+  flex: 1;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.stat-bar .bar::after {
+  content: "";
+}
+
+.stat-bar .value {
+  min-width: 36px;
+  text-align: right;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.stats .bar > div {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 5px;
+  transition: width 0.3s ease;
+}
+
+.skills ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skills li {
+  background: rgba(90, 200, 250, 0.12);
+  border: 1px solid rgba(90, 200, 250, 0.25);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 0.9rem;
+}
+
+#skill-list:empty::after {
+  content: "No skills learned yet";
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.legacy {
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.legacy-list-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.legacy-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.legacy-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(90, 200, 250, 0.25);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text);
+}
+
+.legacy-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+
+.legacy-card .legacy-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.legacy-card .legacy-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.legacy-card .legacy-actions button {
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  border-radius: 999px;
+}
+
+.legacy-empty {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.content {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.content > div {
+  flex: 1;
+}
+
+.menu,
+.training,
+.race {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.menu h2,
+.training h2,
+.race h2 {
+  margin-top: 0;
+  font-size: 1.6rem;
+}
+
+.menu-buttons,
+.training-buttons,
+.race-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+button {
+  background: rgba(90, 200, 250, 0.15);
+  border: 1px solid rgba(90, 200, 250, 0.35);
+  color: var(--text);
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.2s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  background: rgba(90, 200, 250, 0.25);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: linear-gradient(135deg, rgba(90, 200, 250, 0.8), rgba(31, 156, 230, 0.8));
+  border: 1px solid rgba(90, 200, 250, 0.4);
+}
+
+button.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+button.danger {
+  background: rgba(248, 81, 73, 0.18);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+}
+
+.training-log {
+  margin-top: 24px;
+  min-height: 80px;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.training-log .message {
+  margin-bottom: 6px;
+}
+
+.training-log .success {
+  color: var(--success);
+}
+
+.training-log .info {
+  color: var(--accent);
+}
+
+.training-log .warn {
+  color: var(--danger);
+}
+
+.race-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.hud {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  font-size: 0.95rem;
+}
+
+.hud .energy-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hud .energy-bar .bar {
+  width: 120px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.hud .energy-bar .fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #58d68d, #1f9ce6);
+}
+
+.hud-skills {
+  display: flex;
+  gap: 8px;
+}
+
+.hud-skills .skill-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.8rem;
+}
+
+.hud-skills .skill-pill.active {
+  background: rgba(90, 200, 250, 0.25);
+  border: 1px solid rgba(90, 200, 250, 0.4);
+}
+
+#race-canvas {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0f251a;
+  display: block;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal[hidden] {
+  display: none;
+}
+
+.modal-content {
+  background: rgba(10, 12, 18, 0.95);
+  border-radius: 16px;
+  border: 1px solid rgba(90, 200, 250, 0.2);
+  padding: 28px;
+  max-width: 480px;
+  width: 100%;
+}
+
+.modal-content h2 {
+  margin-top: 0;
+}
+
+#results-body {
+  margin: 16px 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 0.95rem;
+}
+
+.result-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.result-entry.player {
+  border: 1px solid rgba(90, 200, 250, 0.6);
+  background: rgba(90, 200, 250, 0.12);
+}
+
+.result-entry .skills-used {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.result-entry details {
+  margin-top: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--muted);
+}
+
+.result-entry details summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.result-entry details ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 0.82rem;
+}
+
+.result-entry details ul li {
+  margin-bottom: 4px;
+}
+
+.result-entry details strong {
+  display: block;
+  color: var(--text);
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+
+.result-entry details strong:first-of-type {
+  margin-top: 4px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 1024px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 18px;
+  }
+
+  .sidebar section {
+    flex: 1 1 220px;
+  }
+}
+
+@media (max-width: 768px) {
+  #app {
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .content {
+    padding: 24px;
+  }
+
+  .hud {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project Stride – Demo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="top-bar">
+      <h1>Project Stride</h1>
+      <div class="token-info">Token: <span id="token-id">--</span></div>
+    </header>
+
+    <main class="layout">
+        <aside class="sidebar">
+          <section class="avatar-info">
+            <h2>Avatar</h2>
+            <div class="avatar-name" id="avatar-name">--</div>
+            <div class="avatar-sessions">Sessions: <span id="avatar-sessions">0</span></div>
+            <div class="avatar-style">Style: <span id="avatar-style">--</span></div>
+            <div class="legacy-flag" id="legacy-flag"></div>
+          </section>
+
+          <section class="stats">
+            <h2>Stats</h2>
+          <div class="stat" data-stat="stride">
+            <span>Stride</span>
+            <div class="stat-bar">
+              <div class="bar" id="stat-stride"></div>
+              <span class="value" id="stat-stride-value">0</span>
+            </div>
+          </div>
+          <div class="stat" data-stat="endurance">
+            <span>Endurance</span>
+            <div class="stat-bar">
+              <div class="bar" id="stat-endurance"></div>
+              <span class="value" id="stat-endurance-value">0</span>
+            </div>
+          </div>
+          <div class="stat" data-stat="force">
+            <span>Force</span>
+            <div class="stat-bar">
+              <div class="bar" id="stat-force"></div>
+              <span class="value" id="stat-force-value">0</span>
+            </div>
+          </div>
+          <div class="stat" data-stat="resolve">
+            <span>Resolve</span>
+            <div class="stat-bar">
+              <div class="bar" id="stat-resolve"></div>
+              <span class="value" id="stat-resolve-value">0</span>
+            </div>
+          </div>
+          <div class="stat" data-stat="insight">
+            <span>Insight</span>
+            <div class="stat-bar">
+              <div class="bar" id="stat-insight"></div>
+              <span class="value" id="stat-insight-value">0</span>
+            </div>
+          </div>
+            <div class="stat" data-stat="mood">
+              <span>Mood</span>
+              <div class="stat-bar">
+                <div class="bar" id="stat-mood"></div>
+                <span class="value" id="stat-mood-value">0</span>
+              </div>
+            </div>
+        </section>
+
+        <section class="skills">
+          <h2>Skills</h2>
+          <ul id="skill-list"></ul>
+        </section>
+
+        <section class="legacy">
+          <h2>Legacy Gallery</h2>
+          <div class="legacy-list-wrapper">
+            <ul id="legacy-list" class="legacy-list"></ul>
+            <div class="legacy-empty" id="legacy-empty">No legacy champions yet.</div>
+          </div>
+        </section>
+      </aside>
+
+      <section class="content">
+        <div class="menu" id="menu-screen">
+          <h2>Main Menu</h2>
+          <p>Select an action for your avatar.</p>
+          <div class="menu-buttons">
+            <button data-action="train" class="primary">Train</button>
+            <button data-action="race" class="primary">Race</button>
+            <button data-action="retire">Retire</button>
+            <button data-action="reset" class="danger">Reset</button>
+          </div>
+        </div>
+
+        <div class="training" id="training-screen" hidden>
+          <h2>Training Session</h2>
+          <p>Select a stat to focus on this session.</p>
+          <div class="training-buttons">
+            <button data-train="stride">Stride</button>
+            <button data-train="endurance">Endurance</button>
+            <button data-train="force">Force</button>
+            <button data-train="resolve">Resolve</button>
+            <button data-train="insight">Insight</button>
+          </div>
+          <div class="training-log" id="training-log"></div>
+          <button id="back-to-menu" class="secondary">Back to Menu</button>
+        </div>
+
+        <div class="race" id="race-screen" hidden>
+          <div class="race-header">
+            <h2>Stride Derby</h2>
+            <div class="hud">
+              <div>Phase: <span id="hud-phase">--</span></div>
+              <div>Timer: <span id="hud-timer">0.0</span>s</div>
+              <div>Rank: <span id="hud-rank">--</span></div>
+              <div class="energy-bar">
+                <span>Stamina</span>
+                <div class="bar">
+                  <div class="fill" id="hud-energy"></div>
+                </div>
+              </div>
+              <div class="hud-skills" id="hud-skills"></div>
+            </div>
+          </div>
+          <canvas id="race-canvas" width="900" height="500"></canvas>
+          <div class="race-controls">
+            <button id="start-race" class="primary">Start Race</button>
+            <button id="race-back" class="secondary">Back to Menu</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal" id="results-modal" hidden>
+    <div class="modal-content">
+      <h2>Race Results</h2>
+      <div id="results-body"></div>
+      <div class="modal-actions">
+        <button id="results-back" class="primary">Back to Menu</button>
+        <button id="results-replay" class="secondary">Replay Race</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="storage.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
