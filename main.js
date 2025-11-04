@@ -21,6 +21,7 @@
     legacyFlag: document.getElementById("legacy-flag"),
     skillList: document.getElementById("skill-list"),
     legacyList: document.getElementById("legacy-list"),
+    legacyEmpty: document.getElementById("legacy-empty"),
     trainingLog: document.getElementById("training-log"),
     hudPhase: document.getElementById("hud-phase"),
     hudTimer: document.getElementById("hud-timer"),
@@ -90,6 +91,13 @@
     race: null,
     lastRaceConfig: null
   };
+
+  const Sfx = createSfx();
+
+  function playSfx(name) {
+    if (!Sfx) return;
+    Sfx.play(name);
+  }
 
   const TRAINING_BASE_GAIN = 8;
   const TRACK_STEP = 1 / 20;
@@ -165,6 +173,10 @@
     });
 
     window.addEventListener("resize", resizeCanvas);
+
+    if (elements.legacyList) {
+      elements.legacyList.addEventListener("click", onLegacyAction);
+    }
   }
 
   function resizeCanvas() {
@@ -199,7 +211,7 @@
     updateMoodUI();
 
     renderSkills();
-    renderLegacyInfo();
+    renderLegacyGallery();
     updateMenuState();
     renderTrainingLog();
   }
@@ -237,20 +249,81 @@
     });
   }
 
-  function renderLegacyInfo() {
+  function renderLegacyGallery() {
+    const list = elements.legacyList;
+    const empty = elements.legacyEmpty;
+    if (!list || !empty) return;
+
+    list.innerHTML = "";
     if (!state.legacyRecords.length) {
-      elements.legacyInfo.textContent = "No legacy data";
+      empty.hidden = false;
       return;
     }
 
-    const entry = state.legacyRecords[0];
-    const skillNames = entry.skills?.length ? entry.skills.map((s) => s.name).join(", ") : "None";
-    const retiredAt = new Date(entry.retiredAt).toLocaleString();
-    elements.legacyInfo.innerHTML = `
-      <div><strong>${entry.name}</strong> (${entry.tokenId})</div>
-      <div>Retired: ${retiredAt}</div>
-      <div>Skills: ${skillNames}</div>
-    `;
+    empty.hidden = true;
+
+    state.legacyRecords.forEach((entry) => {
+      const li = document.createElement("li");
+      li.className = "legacy-card";
+
+      const skillPreview = entry.skills?.length
+        ? `${entry.skills
+            .slice(0, 3)
+            .map((s) => s.name)
+            .join(", ")}${entry.skills.length > 3 ? ` +${entry.skills.length - 3}` : ""}`
+        : "None";
+      const retiredAt = new Date(entry.retiredAt).toLocaleDateString();
+
+      li.innerHTML = `
+        <header>
+          <span>${entry.name}</span>
+          <span class="legacy-meta">${retiredAt}</span>
+        </header>
+        <div class="legacy-meta">Token ${entry.tokenId} • Mood ${entry.mood ?? 0}%</div>
+        <div class="legacy-meta">Skills: ${skillPreview}</div>
+        <div class="legacy-actions">
+          <button data-action="revive" data-id="${entry.id}" class="secondary">Revive</button>
+        </div>
+      `;
+
+      list.appendChild(li);
+    });
+  }
+
+  function onLegacyAction(event) {
+    const button = event.target.closest("button[data-action]");
+    if (!button) return;
+
+    const action = button.dataset.action;
+    const id = button.dataset.id;
+    if (!action || !id) return;
+
+    if (action === "revive") {
+      handleReviveLegacy(id);
+    }
+  }
+
+  function handleReviveLegacy(id) {
+    const record = state.legacyRecords.find((entry) => entry.id === id);
+    if (!record) return;
+
+    const confirmation = window.confirm(
+      `Create a new trainee inspired by ${record.name}? They will gain legacy bonuses based on this champion.`
+    );
+    if (!confirmation) return;
+
+    const nextAvatar = createBaseAvatar({ legacyBonus: true, legacyData: record });
+    state.avatar = nextAvatar;
+    state.tokenId = generateTokenId();
+    state.trainingLog = [];
+    state.lastTrainedStat = null;
+
+    Storage.saveCurrentAvatar(state.avatar);
+    Storage.saveTokenId(state.tokenId);
+
+    addTrainingLog(`Revived a trainee inspired by ${record.name}.`, "success");
+    refreshUI();
+    showScreen("menu");
   }
 
   function updateMenuState() {
@@ -342,6 +415,8 @@
     let gain = Math.round(TRAINING_BASE_GAIN * penalty * bonus);
     gain = Math.max(2, gain);
 
+    playSfx("train");
+
     state.avatar.stats[stat] = clamp(state.avatar.stats[stat] + gain, 0, 100);
     state.avatar.sessions -= 1;
     state.lastTrainedStat = stat;
@@ -402,7 +477,8 @@
       stats: deepClone(state.avatar.stats),
       skills: deepClone(state.avatar.skills),
       tokenId: state.tokenId,
-      retiredAt: Date.now()
+      retiredAt: Date.now(),
+      mood: state.avatar.mood
     };
 
     state.legacyRecords = Storage.addLegacyRecord(record);
@@ -430,6 +506,7 @@
     Storage.resetAll();
     state.trainingLog = [];
     state.lastTrainedStat = null;
+    state.legacyRecords = [];
     init();
   }
 
@@ -463,6 +540,17 @@
     state.lastRaceConfig = deepClone(config);
     state.race = createRaceInstance(config);
     state.race.isReplay = isReplay;
+    state.race.running = false;
+    state.race.loopActive = true;
+    state.race.countdown = 3;
+    state.race.countdownTimer = 0;
+    state.race.countdownActive = true;
+    state.race.countdownLabel = "3";
+    state.race.countdownFlashTimer = 0;
+    playSfx("countdown");
+    const playerRacer = state.race.racers.find((r) => r.isPlayer);
+    updateHud(playerRacer, state.race);
+    drawRace(state.race);
     elements.startRace.disabled = true;
     runRaceLoop();
   }
@@ -530,6 +618,12 @@
       time: 0,
       accumulator: 0,
       running: false,
+      loopActive: false,
+      countdownActive: false,
+      countdown: 3,
+      countdownTimer: 0,
+      countdownFlashTimer: 0,
+      countdownLabel: "3",
       finishedOrder: [],
       animationId: null,
       aiBlueprints: deepClone(config.aiBlueprints),
@@ -579,42 +673,73 @@
       skillLog: [],
       rngModifier: 0,
       mood,
-      skillToast: null
+      skillToast: null,
+      energyHistory: [{ time: 0, energy: 100 }],
+      energySampleTimer: 0
     };
   }
 
   function runRaceLoop() {
     if (!state.race) return;
 
-    state.race.running = true;
-    state.race.accumulator = 0;
+    const race = state.race;
+    race.loopActive = true;
+    race.accumulator = 0;
     let lastTime = performance.now();
 
     const step = (now) => {
-      if (!state.race || !state.race.running) return;
+      if (!state.race || !state.race.loopActive) return;
 
       const delta = Math.min(0.25, (now - lastTime) / 1000);
       lastTime = now;
-      state.race.accumulator += delta;
+      const currentRace = state.race;
 
-      while (state.race.accumulator >= TRACK_STEP) {
-        updateRace(TRACK_STEP);
-        state.race.accumulator -= TRACK_STEP;
+      if (currentRace.countdownFlashTimer > 0) {
+        currentRace.countdownFlashTimer = Math.max(0, currentRace.countdownFlashTimer - delta);
       }
 
-      drawRace(state.race);
+      if (currentRace.countdownActive) {
+        updateCountdown(currentRace, delta);
+      } else if (currentRace.running) {
+        currentRace.accumulator += delta;
+        while (currentRace.accumulator >= TRACK_STEP) {
+          updateRace(TRACK_STEP);
+          currentRace.accumulator -= TRACK_STEP;
+        }
+      }
 
-      if (state.race.running) {
-        state.race.animationId = requestAnimationFrame(step);
+      drawRace(currentRace);
+
+      if (currentRace.loopActive) {
+        currentRace.animationId = requestAnimationFrame(step);
       }
     };
 
-    state.race.animationId = requestAnimationFrame(step);
+    race.animationId = requestAnimationFrame(step);
+  }
+
+  function updateCountdown(race, delta) {
+    race.countdownTimer += delta;
+    if (race.countdownTimer >= 1) {
+      race.countdown -= 1;
+      race.countdownTimer = 0;
+
+      if (race.countdown > 0) {
+        race.countdownLabel = String(race.countdown);
+        playSfx("countdown");
+      } else {
+        race.countdownActive = false;
+        race.running = true;
+        race.countdownLabel = "Go!";
+        race.countdownFlashTimer = 0.8;
+        playSfx("go");
+      }
+    }
   }
 
   function updateRace(dt) {
     const race = state.race;
-    if (!race) return;
+    if (!race || !race.running) return;
 
     race.time += dt;
 
@@ -626,6 +751,8 @@
       if (racer.distance >= TRACK_LENGTH && !racer.finished) {
         racer.finished = true;
         racer.finishTime = race.time;
+        const finalEnergy = Math.round((racer.energy / racer.maxEnergy) * 100);
+        racer.energyHistory.push({ time: race.time, energy: finalEnergy });
         race.finishedOrder.push(racer);
       }
     });
@@ -639,6 +766,13 @@
   }
 
   function stepRacer(racer, dt, race) {
+    if (racer.skillToast) {
+      racer.skillToast.timer -= dt;
+      if (racer.skillToast.timer <= 0) {
+        racer.skillToast = null;
+      }
+    }
+
     const progress = racer.distance / TRACK_LENGTH;
     const phase = progress < 0.3 ? "start" : progress < 0.8 ? "middle" : "final";
 
@@ -652,9 +786,18 @@
     const energyFactor = Math.max(0.4, racer.energy / racer.maxEnergy);
     const skillMultiplier = resolveSkillMultiplier(racer, dt);
     const resolveBoost = phase === "final" && racer.stats.resolve > 40 ? 1 + (racer.stats.resolve - 40) * 0.005 : 1;
+    const moodPercent = clamp(Math.round(racer.mood ?? 70), 0, 120);
+    const moodMultiplier = 1 + (moodPercent - 70) * 0.0015;
     const rngJitter = 1 + (race.rng() - 0.5) * 0.06 + racer.rngModifier;
 
-    let speed = baseSpeed * phaseMultiplier * energyFactor * skillMultiplier * resolveBoost * rngJitter;
+    let speed =
+      baseSpeed *
+      phaseMultiplier *
+      energyFactor *
+      skillMultiplier *
+      resolveBoost *
+      moodMultiplier *
+      rngJitter;
 
     if (racer.energy <= 0) {
       speed *= 0.6;
@@ -666,6 +809,13 @@
 
     const energyCost = speed * 0.1 * dt;
     racer.energy = Math.max(0, racer.energy - energyCost);
+
+    racer.energySampleTimer += dt;
+    if (racer.energySampleTimer >= 1) {
+      racer.energySampleTimer = 0;
+      const energyPercent = Math.round((racer.energy / racer.maxEnergy) * 100);
+      racer.energyHistory.push({ time: race.time, energy: energyPercent });
+    }
   }
 
   function maybeTriggerSkills(racer, phase, race) {
@@ -674,6 +824,8 @@
 
       let chance = 0.3 + racer.stats.insight * 0.002;
       chance += racer.modifiers?.skillChanceBonus || 0;
+      const moodPercent = clamp(Math.round(racer.mood ?? 70), 0, 100);
+      chance += (moodPercent - 50) * 0.002;
 
       if (!racer.isPlayer) {
         if (racer.styleKey === "lead" && phase === "start") {
@@ -689,7 +841,8 @@
         skill.active = true;
         skill.timer = skill.duration;
         skill.used = true;
-        racer.skillLog.push({ name: skill.name, time: race.time });
+        racer.skillToast = { name: skill.name, timer: 1.5 };
+        racer.skillLog.push({ name: skill.name, time: race.time, phase });
       }
     });
   }
@@ -740,24 +893,31 @@
 
   function concludeRace() {
     if (!state.race) return;
-    state.race.running = false;
-    if (state.race.animationId) {
-      cancelAnimationFrame(state.race.animationId);
-      state.race.animationId = null;
+    const race = state.race;
+    race.running = false;
+    race.loopActive = false;
+    playSfx("finish");
+    if (race.animationId) {
+      cancelAnimationFrame(race.animationId);
+      race.animationId = null;
     }
     elements.startRace.disabled = false;
-    showResults(state.race);
+    showResults(race);
   }
 
   function stopRace() {
     if (!state.race) return;
-    state.race.running = false;
-    if (state.race.animationId) {
-      cancelAnimationFrame(state.race.animationId);
-      state.race.animationId = null;
+    const race = state.race;
+    race.running = false;
+    race.loopActive = false;
+    race.countdownActive = false;
+    if (race.animationId) {
+      cancelAnimationFrame(race.animationId);
+      race.animationId = null;
     }
     elements.startRace.disabled = false;
     drawRaceIdle();
+    state.race = null;
   }
 
   function showResults(race) {
@@ -782,6 +942,36 @@
           <div class="skills-used">Skills: ${skillNames}</div>
         </div>
       `;
+
+      const energySamples = (racer.energyHistory || []).filter(
+        (_, idx) => idx % 2 === 0 || idx === (racer.energyHistory || []).length - 1
+      );
+      const energyTimeline = energySamples.slice(Math.max(energySamples.length - 12, 0));
+      const energyList = energyTimeline
+        .map((point) => `<li>${point.time.toFixed(1)}s · ${point.energy}%</li>`)
+        .join("");
+
+      const skillLogList = racer.skillLog.length
+        ? racer.skillLog
+            .map((event) => {
+              const phaseLabel = event.phase ? ` (${capitalize(event.phase)})` : "";
+              return `<li>${event.time.toFixed(1)}s · ${event.name}${phaseLabel}</li>`;
+            })
+            .join("")
+        : "<li>No skills triggered</li>";
+
+      const details = document.createElement("details");
+      details.innerHTML = `
+        <summary>Race log</summary>
+        <div>
+          <strong>Energy</strong>
+          <ul>${energyList || "<li>No data</li>"}</ul>
+          <strong>Skills</strong>
+          <ul>${skillLogList}</ul>
+        </div>
+      `;
+
+      div.appendChild(details);
       elements.resultsBody.appendChild(div);
     });
 
@@ -808,6 +998,22 @@
     });
 
     drawLeaderboardOverlay(race, width, height);
+
+    if (race.countdownActive || (race.countdownFlashTimer && race.countdownFlashTimer > 0)) {
+      ctx.save();
+      const label = race.countdownLabel || `${Math.max(1, Math.ceil(race.countdown || 1))}`;
+      const alpha = race.countdownActive ? 0.88 : clamp(race.countdownFlashTimer / 0.8, 0, 1);
+      ctx.globalAlpha = alpha;
+      const overlaySize = 180;
+      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+      ctx.fillRect(width / 2 - overlaySize / 2, height / 2 - overlaySize / 2, overlaySize, overlaySize);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = label === "Go!" ? "72px sans-serif" : "88px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(label, width / 2, height / 2 + 24);
+      ctx.restore();
+    }
+
     ctx.restore();
   }
 
@@ -869,6 +1075,24 @@
       ctx.stroke();
     }
 
+    if (racer.skillToast) {
+      const alpha = clamp(racer.skillToast.timer / 1.5, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "rgba(12, 16, 24, 0.85)";
+      const toastWidth = 96;
+      const toastHeight = 20;
+      ctx.fillRect(pos.x - toastWidth / 2, pos.y - radius - 30, toastWidth, toastHeight);
+      ctx.strokeStyle = "rgba(90, 200, 250, 0.6)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(pos.x - toastWidth / 2, pos.y - radius - 30, toastWidth, toastHeight);
+      ctx.fillStyle = "#5ac8fa";
+      ctx.font = "11px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(racer.skillToast.name, pos.x, pos.y - radius - 16);
+      ctx.restore();
+    }
+
     ctx.fillStyle = "#ffffff";
     ctx.font = "12px sans-serif";
     ctx.textAlign = "center";
@@ -923,5 +1147,94 @@
 
   function generateTokenId() {
     return `AVT-${Math.floor(Math.random() * 9000 + 1000)}`;
+  }
+
+  function createSfx() {
+    if (typeof window === "undefined") return null;
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return null;
+
+    let ctx = null;
+    const lastPlayed = new Map();
+    const minInterval = 0.04;
+
+    const ensureContext = () => {
+      if (!ctx) {
+        ctx = new AudioCtor();
+      }
+      return ctx;
+    };
+
+    const triggerTone = (context, tone) => {
+      const oscillator = context.createOscillator();
+      const gainNode = context.createGain();
+      oscillator.type = tone.type || "sine";
+      oscillator.frequency.value = tone.freq;
+      const start = context.currentTime + (tone.delay || 0);
+      const duration = Math.max(0.05, tone.duration || 0.18);
+      const peak = Math.max(0.001, tone.gain || 0.2);
+
+      gainNode.gain.setValueAtTime(0, start);
+      gainNode.gain.linearRampToValueAtTime(peak, start + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(context.destination);
+
+      oscillator.start(start);
+      oscillator.stop(start + duration + 0.05);
+    };
+
+    const patterns = {
+      train: [{ freq: 880, duration: 0.12, gain: 0.25 }],
+      countdown: [{ freq: 520, duration: 0.2, gain: 0.22 }],
+      go: [
+        { freq: 760, duration: 0.16, gain: 0.24 },
+        { freq: 1020, duration: 0.12, gain: 0.2, delay: 0.08 }
+      ],
+      finish: [
+        { freq: 660, duration: 0.22, gain: 0.23 },
+        { freq: 880, duration: 0.18, gain: 0.2, delay: 0.18 }
+      ]
+    };
+
+    const play = (name) => {
+      const pattern = patterns[name];
+      if (!pattern) return;
+      const context = ensureContext();
+      if (!context) return;
+
+      const schedulePattern = () => {
+        const now = context.currentTime;
+        const last = lastPlayed.get(name) || 0;
+        if (now - last < minInterval) {
+          return;
+        }
+        lastPlayed.set(name, now);
+        pattern.forEach((tone) => triggerTone(context, tone));
+      };
+
+      if (context.state === "suspended") {
+        context
+          .resume()
+          .then(schedulePattern)
+          .catch(() => {});
+      } else {
+        schedulePattern();
+      }
+    };
+
+    window.addEventListener(
+      "pointerdown",
+      () => {
+        const context = ensureContext();
+        if (context && context.state === "suspended") {
+          context.resume().catch(() => {});
+        }
+      },
+      { once: true }
+    );
+
+    return { play };
   }
 })();

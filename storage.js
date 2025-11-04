@@ -33,13 +33,47 @@
   }
 
   function loadLegacyRecords() {
-    return safeParse(localStorage.getItem(STORAGE_KEYS.legacy), []);
+    const stored = safeParse(localStorage.getItem(STORAGE_KEYS.legacy), []);
+    if (!Array.isArray(stored)) return [];
+
+    let mutated = false;
+    const normalized = stored.map((record) => {
+      const entry = { ...record };
+      if (!entry.id) {
+        entry.id = `legacy-${entry.retiredAt || Date.now()}`;
+        mutated = true;
+      }
+      if (typeof entry.mood !== "number") {
+        entry.mood = 75;
+        mutated = true;
+      }
+      return entry;
+    });
+
+    if (mutated) {
+      localStorage.setItem(STORAGE_KEYS.legacy, JSON.stringify(normalized.slice(0, 8)));
+    }
+
+    return normalized;
   }
 
   function addLegacyRecord(record) {
     const records = loadLegacyRecords();
-    records.unshift(record);
-    const trimmed = records.slice(0, 5);
+    const entry = { ...record };
+    if (!entry.id) {
+      entry.id = `legacy-${entry.retiredAt || Date.now()}`;
+    }
+    if (typeof entry.mood !== "number") {
+      entry.mood = 75;
+    }
+
+    const existingIndex = records.findIndex((item) => item.id === entry.id);
+    if (existingIndex >= 0) {
+      records.splice(existingIndex, 1);
+    }
+
+    records.unshift(entry);
+    const trimmed = records.slice(0, 8);
     localStorage.setItem(STORAGE_KEYS.legacy, JSON.stringify(trimmed));
     return trimmed;
   }

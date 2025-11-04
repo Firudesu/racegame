@@ -72,12 +72,18 @@
       skillChanceBonus: legacyBonus ? 0.1 : 0
     };
 
+    const baseMood = legacyData
+      ? clamp(Math.round((legacyData.mood ?? 75) * 0.6 + 30), 50, 98)
+      : legacyBonus
+      ? 85
+      : 75;
+
     return {
       name: randomName(),
       sessions: 5,
       stats: baseStats,
       skills: [],
-      mood: legacyBonus ? 85 : 75,
+      mood: baseMood,
       modifiers,
       legacy: legacyBonus,
       createdAt: Date.now(),
