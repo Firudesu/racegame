@@ -260,13 +260,30 @@
 
   function renderSkills() {
     elements.skillList.innerHTML = "";
+    const rarityLabels = {
+      1: "Common",
+      2: "Uncommon",
+      3: "Rare",
+      4: "Epic",
+      5: "Legendary"
+    };
     state.avatar.skills.forEach((skill) => {
       const li = document.createElement("li");
-      li.innerHTML = `<strong>${skill.name}</strong><br/><small>${skill.trigger.toUpperCase()} • +${Math.round(
-        skill.boost * 100
-      )}% for ${skill.duration}s</small>`;
+      const description = skill.description || skill.meta?.summary || formatSkillSummary(skill);
+      const rarityText = rarityLabels[skill.rarity || 1] || "Common";
+      li.innerHTML = `<strong>${skill.name}</strong><br/><small>${description} • ${rarityText}</small>`;
       elements.skillList.appendChild(li);
     });
+  }
+
+  function formatSkillSummary(skill) {
+    if (!skill) return "Passive bonus";
+    if (skill.description) return skill.description;
+    if (skill.trigger && typeof skill.boost === "number") {
+      return `${capitalize(skill.trigger)} burst +${Math.round(skill.boost * 100)}%`;
+    }
+    if (skill.type) return capitalize(skill.type);
+    return "Passive bonus";
   }
 
   function renderLegacyGallery() {
@@ -626,13 +643,41 @@
 
   function attemptPass(behind, ahead, race) {
     const racerStyle = behind.style || "Pacer";
-    const passChance = clamp(behind.performance.maneuver / 100, 0.05, 0.99);
+    let passChance = clamp(behind.performance.maneuver / 100 + (behind.passBonus || 0), 0.05, 0.99);
+    if (behind.predictive) {
+      passChance = Math.min(0.99, passChance + 0.05);
+    }
     const maneuverAdvantage = behind.performance.maneuver >= ahead.performance.maneuver + 2;
     const speedAdvantage = behind.performance.speed >= ahead.performance.speed + 2;
     const roll = race.rng();
-    const success = maneuverAdvantage || speedAdvantage || roll < passChance;
+    let success = maneuverAdvantage || speedAdvantage || roll < passChance;
 
-    behind.passCooldown = PASS_COOLDOWN;
+    const cooldown = PASS_COOLDOWN * (behind.cooldownFactor || 1);
+    behind.passCooldown = cooldown;
+
+    if (success && ahead.defenseBonus) {
+      const defenseRoll = race.rng();
+      if (defenseRoll < ahead.defenseBonus) {
+        success = false;
+        console.log(
+          `%cDefended%c ${ahead.name} held the line against ${behind.name}.`,
+          "color:#ffd166; font-weight:bold;",
+          "color:#d0d3e8"
+        );
+      }
+    }
+
+    if (success && ahead.blocker) {
+      const blockRoll = race.rng();
+      if (blockRoll < 0.45) {
+        success = false;
+        console.log(
+          `%cBlock Attempt%c ${ahead.name} cut off ${behind.name}.`,
+          "color:#f29e4c; font-weight:bold;",
+          "color:#d0d3e8"
+        );
+      }
+    }
 
     if (success) {
       const offsets = [];
@@ -657,14 +702,18 @@
       }
         behind.lane = chosenLane;
         behind.distance += 1;
-      behind.passCooldown = PASS_COOLDOWN;
+      behind.passCooldown = cooldown;
       console.log(
         `%cPass Success%c ${behind.name} (${racerStyle}) moved to lane ${behind.lane}`,
         "color:#58d68d; font-weight:bold;",
         "color:#d0d3e8"
       );
     } else {
-      const slowdown = 0.95 - race.rng() * 0.05;
+      let slowdown = 0.95 - race.rng() * 0.05;
+      if (behind.recoveryFactor) {
+        const penalty = 1 - slowdown;
+        slowdown = 1 - penalty * behind.recoveryFactor;
+      }
       behind.speed *= slowdown;
       console.log(
         `%cPass Blocked%c ${behind.name} (${racerStyle}) slowed (${(slowdown * 100).toFixed(0)}%)`,
@@ -810,7 +859,7 @@
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
 
-    return {
+    const racerObj = {
       id,
       name,
       color,
@@ -847,6 +896,104 @@
       passCooldown: 0,
       lastPhaseLogged: null
     };
+    applyPassiveSkills(racerObj);
+    return racerObj;
+  }
+
+  function applyPassiveSkills(racer) {
+    racer.passBonus = 0;
+    racer.defenseBonus = 0;
+    racer.cooldownFactor = 1;
+    racer.slipstreamBonus = 0;
+    racer.recoveryFactor = 1;
+    racer.energyDrainFactor = 1;
+    racer.coolRecoveryRate = 0;
+    racer.blocker = false;
+    racer.predictive = false;
+    racer.adaptiveFactor = 1;
+    racer.jitterFactor = 1;
+    racer.handlingBonus = 0;
+    racer.handlingPenaltyBase = 1;
+    racer.handlingPenaltyActive = 1;
+
+    (racer.skills || []).forEach((skill) => {
+      if (!skill) return;
+      const effect = skill.effect || {};
+      if (effect.passBonus) {
+        racer.passBonus += effect.passBonus;
+      }
+      if (effect.slipstreamBonus) {
+        racer.slipstreamBonus = Math.max(racer.slipstreamBonus, effect.slipstreamBonus);
+      }
+      if (effect.defenseBonus) {
+        racer.defenseBonus = Math.max(racer.defenseBonus, effect.defenseBonus);
+      }
+      if (effect.recoveryFactor) {
+        racer.recoveryFactor = Math.min(racer.recoveryFactor, effect.recoveryFactor);
+      }
+      if (effect.adaptiveFactor) {
+        racer.adaptiveFactor *= effect.adaptiveFactor;
+      }
+      if (effect.riskPenalty) {
+        skill.riskPenalty = true;
+      }
+      if (effect.handlingBonus) {
+        racer.handlingBonus += effect.handlingBonus;
+      }
+      if (effect.jitterFactor) {
+        racer.jitterFactor *= effect.jitterFactor;
+      }
+      if (effect.energyDrainFactor) {
+        racer.energyDrainFactor *= effect.energyDrainFactor;
+      }
+      if (effect.block) {
+        racer.blocker = true;
+      }
+      if (effect.cooldownFactor) {
+        racer.cooldownFactor *= effect.cooldownFactor;
+      }
+      if (effect.predictive) {
+        racer.predictive = true;
+      }
+      if (effect.coolRecoveryRate) {
+        racer.coolRecoveryRate = Math.max(racer.coolRecoveryRate, effect.coolRecoveryRate);
+      }
+
+      // Active skill defaults
+      if (skill.type === "active") {
+        if (!skill.trigger) skill.trigger = "final";
+        if (typeof skill.duration !== "number") skill.duration = 3;
+        if (typeof skill.boost !== "number") skill.boost = 0.15;
+      }
+    });
+
+    racer.passBonus = Math.min(racer.passBonus, 0.45);
+    racer.cooldownFactor = Math.max(0.6, Math.min(racer.cooldownFactor, 1.2));
+    racer.defenseBonus = Math.min(Math.max(racer.defenseBonus, 0), 0.6);
+    racer.recoveryFactor = Math.max(0.3, Math.min(racer.recoveryFactor, 1));
+    racer.energyDrainFactor = Math.max(0.4, Math.min(racer.energyDrainFactor, 1.2));
+    racer.slipstreamBonus = Math.max(0, Math.min(racer.slipstreamBonus, 0.12));
+    racer.coolRecoveryRate = Math.max(0, Math.min(racer.coolRecoveryRate, 0.05));
+    if (racer.handlingBonus) {
+      racer.maxSpeed *= 1 + racer.handlingBonus;
+    }
+    racer.acceleration *= racer.adaptiveFactor;
+    racer.handlingPenaltyActive = racer.handlingPenaltyBase;
+  }
+
+  function computeSlipstreamMultiplier(racer, race) {
+    if (!racer.slipstreamBonus) return 1;
+    let bonus = 1;
+    const threshold = 30;
+    race.racers.forEach((other) => {
+      if (other === racer || other.finished || other.lane !== racer.lane) return;
+      const delta = (other.distance - racer.distance + TRACK_LENGTH) % TRACK_LENGTH;
+      if (delta > 0 && delta < threshold) {
+        const scaled = 1 + racer.slipstreamBonus * (1 - delta / threshold);
+        bonus = Math.max(bonus, scaled);
+      }
+    });
+    return bonus;
   }
 
   function runRaceLoop() {
@@ -981,7 +1128,9 @@
     const resolveBoost = phase === "final" && racer.stats.resolve > 40 ? 1 + (racer.stats.resolve - 40) * 0.005 : 1;
     const moodPercent = clamp(Math.round(racer.mood ?? 70), 0, 120);
     const moodMultiplier = 1 + (moodPercent - 70) * 0.0015;
-    const rngJitter = 1 + (race.rng() - 0.5) * 0.06 + racer.rngModifier;
+    const jitterRange = (race.rng() - 0.5) * 0.06 * (racer.jitterFactor || 1);
+    const rngJitter = 1 + jitterRange + racer.rngModifier;
+    const slipstreamMultiplier = computeSlipstreamMultiplier(racer, race);
 
     let targetSpeed =
       baseSpeed *
@@ -990,6 +1139,7 @@
       skillMultiplier *
       resolveBoost *
       moodMultiplier *
+      slipstreamMultiplier *
       rngJitter;
 
     if (racer.energy <= 0) {
@@ -1005,7 +1155,8 @@
     } else {
       updatedSpeed = currentSpeed + Math.max(speedDelta, -racer.acceleration * 0.7 * dt);
     }
-    updatedSpeed = Math.min(updatedSpeed, racer.maxSpeed);
+    const handlingCap = racer.maxSpeed * (racer.handlingPenaltyActive || racer.handlingPenaltyBase || 1);
+    updatedSpeed = Math.min(updatedSpeed, handlingCap);
     if (!Number.isFinite(updatedSpeed) || updatedSpeed < 0) {
       updatedSpeed = Math.max(0, targetSpeed);
     }
@@ -1013,8 +1164,13 @@
     racer.speed = updatedSpeed;
     racer.distance += updatedSpeed * dt;
 
-    const energyCost = updatedSpeed * 0.1 * dt;
+    const energyCost = updatedSpeed * 0.1 * dt * (racer.energyDrainFactor || 1);
     racer.energy = Math.max(0, racer.energy - energyCost);
+
+    if (racer.coolRecoveryRate && updatedSpeed < racer.baseSpeed * 0.65) {
+      const recovery = racer.maxEnergy * racer.coolRecoveryRate * dt;
+      racer.energy = Math.min(racer.maxEnergy, racer.energy + recovery);
+    }
 
     racer.energySampleTimer += dt;
     if (racer.energySampleTimer >= 1) {
@@ -1024,48 +1180,58 @@
     }
   }
 
-  function maybeTriggerSkills(racer, phase, race) {
-    racer.skills.forEach((skill) => {
-      if (skill.used || skill.active || skill.trigger !== phase) return;
+    function maybeTriggerSkills(racer, phase, race) {
+      racer.skills.forEach((skill) => {
+        if (skill.type && skill.type !== "active") return;
+        if (!skill.trigger) return;
+        if (skill.used || skill.active || skill.trigger !== phase) return;
 
-      let chance = 0.3 + racer.stats.insight * 0.002;
-      chance += racer.modifiers?.skillChanceBonus || 0;
-      const moodPercent = clamp(Math.round(racer.mood ?? 70), 0, 100);
-      chance += (moodPercent - 50) * 0.002;
+        let chance = 0.3 + racer.stats.insight * 0.002;
+        chance += racer.modifiers?.skillChanceBonus || 0;
+        const moodPercent = clamp(Math.round(racer.mood ?? 70), 0, 100);
+        chance += (moodPercent - 50) * 0.002;
 
-      if (!racer.isPlayer) {
-        if (racer.style === "Leader" && phase === "start") {
-          chance += 0.1;
-        } else if (racer.style === "Chaser" && phase === "final") {
-          chance += 0.2;
-        } else if (racer.style === "Sprinter" && phase === "final") {
-          chance += 0.15;
+        if (!racer.isPlayer) {
+          if (racer.style === "Leader" && phase === "start") {
+            chance += 0.1;
+          } else if (racer.style === "Chaser" && phase === "final") {
+            chance += 0.2;
+          } else if (racer.style === "Sprinter" && phase === "final") {
+            chance += 0.15;
+          }
         }
-      }
 
-      chance = clamp(chance, 0, 0.95);
+        chance = clamp(chance, 0, 0.95);
 
-      if (race.rng() < chance) {
-        skill.active = true;
-        skill.timer = skill.duration;
-        skill.used = true;
-        racer.skillToast = { name: skill.name, timer: 1.5 };
-        racer.skillLog.push({ name: skill.name, time: race.time, phase });
-      }
-    });
-  }
+        if (race.rng() < chance) {
+          skill.active = true;
+          skill.timer = skill.duration;
+          skill.used = true;
+          racer.skillToast = { name: skill.name, timer: 1.5 };
+          racer.skillLog.push({ name: skill.name, time: race.time, phase });
+        }
+      });
+    }
 
   function resolveSkillMultiplier(racer, dt) {
     let multiplier = 1;
+    let handlingPenalty = racer.handlingPenaltyBase || 1;
+    if (!racer.skills) return multiplier;
     racer.skills.forEach((skill) => {
       if (!skill.active) return;
       skill.timer -= dt;
       if (skill.timer > 0) {
-        multiplier *= 1 + skill.boost;
+        if (typeof skill.boost === "number") {
+          multiplier *= 1 + skill.boost;
+        }
+        if (skill.riskPenalty) {
+          handlingPenalty *= 0.85;
+        }
       } else {
         skill.active = false;
       }
     });
+    racer.handlingPenaltyActive = handlingPenalty;
     return multiplier;
   }
 

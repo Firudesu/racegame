@@ -3,14 +3,168 @@
 (() => {
   const TRACK_LENGTH = 1200;
   const SKILL_LIBRARY = [
-    { name: "Rush Surge", trigger: "final", boost: 0.15, duration: 4 },
-    { name: "Iron Will", trigger: "final", boost: 0.22, duration: 3.5 },
-    { name: "Early Burst", trigger: "start", boost: 0.14, duration: 3 },
-    { name: "Steady Rhythm", trigger: "middle", boost: 0.12, duration: 5 },
-    { name: "Second Wind", trigger: "middle", boost: 0.18, duration: 3 },
-    { name: "Mind Focus", trigger: "start", boost: 0.1, duration: 4 },
-    { name: "Resolve Breaker", trigger: "final", boost: 0.2, duration: 4.5 },
-    { name: "Insight Flash", trigger: "middle", boost: 0.16, duration: 3.5 }
+    {
+      name: "Rush Surge",
+      trigger: "final",
+      boost: 0.15,
+      duration: 4,
+      rarity: 1,
+      type: "active",
+      description: "Final-phase burst of speed."
+    },
+    {
+      name: "Iron Will",
+      trigger: "final",
+      boost: 0.22,
+      duration: 3.5,
+      rarity: 2,
+      type: "active",
+      description: "Late sprint with strong resolve."
+    },
+    {
+      name: "Early Burst",
+      trigger: "start",
+      boost: 0.14,
+      duration: 3,
+      rarity: 1,
+      type: "active",
+      description: "Launchs hard off the line."
+    },
+    {
+      name: "Steady Rhythm",
+      trigger: "middle",
+      boost: 0.12,
+      duration: 5,
+      rarity: 1,
+      type: "active",
+      description: "Maintains pacing through the middle."
+    },
+    {
+      name: "Second Wind",
+      trigger: "middle",
+      boost: 0.18,
+      duration: 3,
+      rarity: 2,
+      type: "active",
+      description: "Recovers energy mid race."
+    },
+    {
+      name: "Mind Focus",
+      trigger: "start",
+      boost: 0.1,
+      duration: 4,
+      rarity: 1,
+      type: "active",
+      description: "Calm start that steadies nerves."
+    },
+    {
+      name: "Resolve Breaker",
+      trigger: "final",
+      boost: 0.2,
+      duration: 4.5,
+      rarity: 2,
+      type: "active",
+      description: "Crushes opponents in final surge."
+    },
+    {
+      name: "Insight Flash",
+      trigger: "middle",
+      boost: 0.16,
+      duration: 3.5,
+      rarity: 1,
+      type: "active",
+      description: "Reads the pack and moves efficiently."
+    },
+    // Advanced racing skills
+    {
+      name: "Overtake",
+      type: "passive",
+      rarity: 2,
+      description: "Improves passing decisions when faster than target.",
+      effect: { passBonus: 0.12 }
+    },
+    {
+      name: "Slipstream",
+      type: "passive",
+      rarity: 1,
+      description: "Gain a boost when following closely.",
+      effect: { slipstreamBonus: 0.07 }
+    },
+    {
+      name: "Defend Line",
+      type: "passive",
+      rarity: 2,
+      description: "Shifts position to deny passing attempts.",
+      effect: { defenseBonus: 0.3 }
+    },
+    {
+      name: "Boost",
+      type: "active",
+      trigger: "final",
+      boost: 0.22,
+      duration: 2.8,
+      rarity: 3,
+      description: "Short burst of acceleration and speed."
+    },
+    {
+      name: "Recovery",
+      type: "passive",
+      rarity: 2,
+      description: "Quicker to regain pace after slowdowns.",
+      effect: { recoveryFactor: 0.6 }
+    },
+    {
+      name: "Adaptive Drive",
+      type: "passive",
+      rarity: 3,
+      description: "Adjusts driving line and throttle on the fly.",
+      effect: { adaptiveFactor: 1.08 }
+    },
+    {
+      name: "Risk Push",
+      type: "active",
+      trigger: "final",
+      boost: 0.28,
+      duration: 2.2,
+      rarity: 4,
+      description: "Huge speed burst with reduced control.",
+      effect: { riskPenalty: true }
+    },
+    {
+      name: "Precision Drive",
+      type: "passive",
+      rarity: 2,
+      description: "Smoother cornering and stable line.",
+      effect: { handlingBonus: 0.04, jitterFactor: 0.6 }
+    },
+    {
+      name: "Fatigue Drop",
+      type: "passive",
+      rarity: 3,
+      description: "Reduces endurance drain over time.",
+      effect: { energyDrainFactor: 0.85 }
+    },
+    {
+      name: "Block Attempt",
+      type: "triggered",
+      rarity: 2,
+      description: "Attempts to shut down passes from behind.",
+      effect: { block: true, defenseBonus: 0.2 }
+    },
+    {
+      name: "Predictive Overtake",
+      type: "passive",
+      rarity: 3,
+      description: "Starts passing moves earlier using anticipation.",
+      effect: { passBonus: 0.08, cooldownFactor: 0.7, predictive: true }
+    },
+    {
+      name: "Cool Recovery",
+      type: "passive",
+      rarity: 2,
+      description: "Recovers a little stamina at low speeds.",
+      effect: { coolRecoveryRate: 0.016 }
+    }
   ];
 
   const RACING_STYLES = {
@@ -67,10 +221,23 @@
     };
   }
 
+  function weightedSample(skills) {
+    const total = skills.reduce((sum, skill) => sum + (5 - (skill.rarity || 1)), 0);
+    let roll = Math.random() * total;
+    for (const skill of skills) {
+      roll -= 5 - (skill.rarity || 1);
+      if (roll <= 0) {
+        return skill;
+      }
+    }
+    return skills[skills.length - 1];
+  }
+
   function pickRandomSkill(existingNames = []) {
     const pool = SKILL_LIBRARY.filter((skill) => !existingNames.includes(skill.name));
     if (!pool.length) return null;
-    return deepClone(pool[Math.floor(Math.random() * pool.length)]);
+    const selected = weightedSample(pool);
+    return deepClone(selected);
   }
 
   function createBaseAvatar({ legacyBonus = false, legacyData = null } = {}) {
