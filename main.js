@@ -67,6 +67,10 @@
     insight: {
       bar: document.getElementById("stat-insight"),
       value: document.getElementById("stat-insight-value")
+    },
+    mood: {
+      bar: document.getElementById("stat-mood"),
+      value: document.getElementById("stat-mood-value")
     }
   };
 
@@ -105,6 +109,8 @@
       });
       Storage.saveCurrentAvatar(state.avatar);
     }
+
+    ensureAvatarSchema();
 
     if (!state.tokenId) {
       state.tokenId = generateTokenId();
@@ -190,10 +196,34 @@
       bar.value.textContent = value;
     });
 
+    updateMoodUI();
+
     renderSkills();
     renderLegacyInfo();
     updateMenuState();
     renderTrainingLog();
+  }
+
+  function ensureAvatarSchema() {
+    if (!state.avatar) return;
+
+    if (typeof state.avatar.mood !== "number") {
+      state.avatar.mood = 75;
+    }
+
+    if (!state.avatar.version || state.avatar.version < 2) {
+      state.avatar.version = 2;
+    }
+
+    Storage.saveCurrentAvatar(state.avatar);
+  }
+
+  function updateMoodUI() {
+    const moodBar = statBars.mood;
+    if (!moodBar) return;
+    const mood = clamp(Math.round(state.avatar.mood ?? 0), 0, 100);
+    moodBar.bar.style.width = `${mood}%`;
+    moodBar.value.textContent = `${mood}%`;
   }
 
   function renderSkills() {
@@ -317,6 +347,14 @@
     state.lastTrainedStat = stat;
     addTrainingLog(`Focused on ${capitalize(stat)}: +${gain} points.`);
 
+    const moodShift = adjustMood(sameStat ? -7 : -5);
+    if (moodShift) {
+      addTrainingLog(
+        `Training impact on mood ${moodShift > 0 ? "+" : ""}${moodShift}.`,
+        moodShift > 0 ? "success" : "info"
+      );
+    }
+
     tryUnlockSkill(stat);
     Storage.saveCurrentAvatar(state.avatar);
     refreshUI();
@@ -340,6 +378,13 @@
       if (newSkill) {
         state.avatar.skills.push(newSkill);
         addTrainingLog(`Unlocked skill: ${newSkill.name}!`, "success");
+        const uplift = adjustMood(4);
+        if (uplift) {
+          addTrainingLog(
+            `Skill breakthrough boosted mood ${uplift > 0 ? "+" : ""}${uplift}.`,
+            "success"
+          );
+        }
       }
     } else if (stat === "insight") {
       addTrainingLog("Insight training sharpened instincts. Skill chance increased subtly.", "info");
@@ -396,6 +441,17 @@
     renderTrainingLog();
   }
 
+  function adjustMood(delta) {
+    if (typeof state.avatar.mood !== "number") {
+      state.avatar.mood = 75;
+    }
+    const before = Math.round(state.avatar.mood);
+    const after = clamp(Math.round(before + delta), 0, 100);
+    state.avatar.mood = after;
+    updateMoodUI();
+    return after - before;
+  }
+
   function startRace(isReplay) {
     if (state.race && state.race.running) {
       return;
@@ -406,6 +462,7 @@
 
     state.lastRaceConfig = deepClone(config);
     state.race = createRaceInstance(config);
+    state.race.isReplay = isReplay;
     elements.startRace.disabled = true;
     runRaceLoop();
   }
@@ -424,7 +481,8 @@
         name: state.avatar.name,
         stats: deepClone(state.avatar.stats),
         skills: deepClone(state.avatar.skills),
-        modifiers: deepClone(state.avatar.modifiers || { trainingBonus: 0, skillChanceBonus: 0 })
+        modifiers: deepClone(state.avatar.modifiers || { trainingBonus: 0, skillChanceBonus: 0 }),
+        mood: state.avatar.mood
       }
     };
   }
@@ -442,7 +500,8 @@
       modifiers: config.playerSnapshot.modifiers,
       isPlayer: true,
       phaseMultipliers: { start: 1, middle: 1, final: 1 },
-      styleKey: "player"
+      styleKey: "player",
+      mood: config.playerSnapshot.mood
     });
     racers.push(player);
 
@@ -458,7 +517,8 @@
           isPlayer: false,
           phaseMultipliers: blueprint.phaseMultipliers,
           styleKey: blueprint.styleKey,
-          styleName: blueprint.styleName
+          styleName: blueprint.styleName,
+          mood: blueprint.mood
         })
       );
     });
@@ -473,7 +533,8 @@
       finishedOrder: [],
       animationId: null,
       aiBlueprints: deepClone(config.aiBlueprints),
-      playerSnapshot: deepClone(config.playerSnapshot)
+      playerSnapshot: deepClone(config.playerSnapshot),
+      leaderboard: racers.slice()
     };
   }
 
@@ -487,7 +548,8 @@
     isPlayer,
     phaseMultipliers,
     styleKey,
-    styleName
+    styleName,
+    mood
   }) {
     const maxEnergy = stats.endurance * 10;
     return {
@@ -515,7 +577,9 @@
       finishTime: null,
       depleted: false,
       skillLog: [],
-      rngModifier: 0
+      rngModifier: 0,
+      mood,
+      skillToast: null
     };
   }
 

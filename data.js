@@ -77,10 +77,11 @@
       sessions: 5,
       stats: baseStats,
       skills: [],
+      mood: legacyBonus ? 85 : 75,
       modifiers,
       legacy: legacyBonus,
       createdAt: Date.now(),
-      version: 1
+      version: 2
     };
   }
 
@@ -113,7 +114,8 @@
       styleName: style.name,
       phaseMultipliers: deepClone(style.multipliers),
       skills: rng() < 0.5 ? [deepClone(SKILL_LIBRARY[Math.floor(rng() * SKILL_LIBRARY.length)])] : [],
-      modifiers: { trainingBonus: 0, skillChanceBonus: 0 }
+      modifiers: { trainingBonus: 0, skillChanceBonus: 0 },
+      mood: clamp(Math.round(65 + (rng() - 0.5) * 30), 40, 95)
     };
   }
 
