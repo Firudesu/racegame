@@ -51,6 +51,16 @@
         entry.style = entry.styleName;
         mutated = true;
       }
+      if (
+        (!entry.aptitudes || !entry.profile) &&
+        entry.stats &&
+        window.ProjectStrideData?.buildRacingProfile
+      ) {
+        const profile = window.ProjectStrideData.buildRacingProfile(entry.stats);
+        entry.profile = profile;
+        entry.aptitudes = profile.aptitudes;
+        mutated = true;
+      }
       return entry;
     });
 
@@ -72,6 +82,15 @@
     }
     if (!entry.style && entry.styleName) {
       entry.style = entry.styleName;
+    }
+    if (
+      (!entry.aptitudes || !entry.profile) &&
+      entry.stats &&
+      window.ProjectStrideData?.buildRacingProfile
+    ) {
+      const profile = window.ProjectStrideData.buildRacingProfile(entry.stats);
+      entry.profile = profile;
+      entry.aptitudes = profile.aptitudes;
     }
 
     const existingIndex = records.findIndex((item) => item.id === entry.id);

@@ -13,7 +13,8 @@
     createBaseAvatar,
     createAIRacer,
     RACING_STYLES,
-    derivePerformance
+    buildRacingProfile,
+    deriveAptitudes
   } = Data;
 
   const elements = {
@@ -228,6 +229,7 @@
   }
 
   function refreshUI() {
+    updateAvatarProfile();
     elements.tokenId.textContent = state.tokenId;
     elements.avatarName.textContent = state.avatar.name;
     elements.sessions.textContent = state.avatar.sessions;
@@ -262,10 +264,34 @@
       state.avatar.style = "Pacer";
     }
 
+    const coreStats = ["stride", "endurance", "force", "resolve", "insight"];
+    state.avatar.stats = state.avatar.stats || {};
+    coreStats.forEach((key) => {
+      if (typeof state.avatar.stats[key] !== "number") {
+        state.avatar.stats[key] = 50;
+      }
+    });
+
+    state.avatar.modifiers = state.avatar.modifiers || {};
+    const mods = state.avatar.modifiers;
+    if (typeof mods.trainingBonus !== "number") {
+      mods.trainingBonus = state.avatar.legacy ? 0.12 : 0.05;
+    }
+    if (typeof mods.skillChanceBonus !== "number") {
+      mods.skillChanceBonus = state.avatar.legacy ? 0.12 : 0.05;
+    }
+    if (typeof mods.legendaryLuck !== "number") {
+      mods.legendaryLuck = state.avatar.legacy ? 0.25 : 0.08;
+    }
+    if (typeof mods.secondaryBonus !== "number") {
+      mods.secondaryBonus = state.avatar.legacy ? 0.2 : 0.08;
+    }
+
     if (!state.avatar.version || state.avatar.version < 3) {
       state.avatar.version = 3;
     }
 
+    updateAvatarProfile();
     Storage.saveCurrentAvatar(state.avatar);
   }
 
@@ -329,6 +355,11 @@
             .join(", ")}${entry.skills.length > 3 ? ` +${entry.skills.length - 3}` : ""}`
         : "None";
       const retiredAt = new Date(entry.retiredAt).toLocaleDateString();
+      const distanceLabel = entry.aptitudes?.distance?.type || "Balanced";
+      const surfaceLabel = entry.aptitudes?.surface?.preferred || "Balanced";
+      const passingLabel = entry.aptitudes?.passing?.rating
+        ? `${entry.aptitudes.passing.rating}`
+        : "--";
 
       li.innerHTML = `
         <header>
@@ -337,6 +368,7 @@
         </header>
         <div class="legacy-meta">Token ${entry.tokenId} • Mood ${entry.mood ?? 0}%</div>
         <div class="legacy-meta">Style: ${entry.style || entry.styleName || "Unknown"}</div>
+        <div class="legacy-meta">Distance: ${distanceLabel} • Surface: ${surfaceLabel} • Passing: ${passingLabel}</div>
         <div class="legacy-meta">Skills: ${skillPreview}</div>
         <div class="legacy-actions">
           <button data-action="revive" data-id="${entry.id}" class="secondary">Revive</button>
@@ -375,6 +407,8 @@
     state.tokenId = generateTokenId();
     state.trainingLog = [];
     state.lastTrainedStat = null;
+
+    updateAvatarProfile();
 
     Storage.saveCurrentAvatar(state.avatar);
     Storage.saveTokenId(state.tokenId);
@@ -467,15 +501,49 @@
       return;
     }
 
+    updateAvatarProfile();
+    const beforeProfile = deepClone(state.avatar.profile || buildRacingProfile(state.avatar.stats));
+    const modifiers = state.avatar.modifiers || {};
+    const legendaryLuck = modifiers.legendaryLuck || 0;
+    const secondaryBonus = modifiers.secondaryBonus || 0;
+
     const sameStat = state.lastTrainedStat === stat;
     const penalty = sameStat ? 0.75 : 1;
     const bonus = 1 + (state.avatar.modifiers?.trainingBonus || 0);
-    let gain = Math.round(TRAINING_BASE_GAIN * penalty * bonus);
+    const variance = 0.85 + Math.random() * (0.45 + legendaryLuck);
+    let gain = Math.round(
+      TRAINING_BASE_GAIN * penalty * bonus * (1 + secondaryBonus * 0.25) * variance
+    );
     gain = Math.max(2, gain);
 
     playSfx("train");
 
     state.avatar.stats[stat] = clamp(state.avatar.stats[stat] + gain, 0, 100);
+
+    const secondaryMap = {
+      stride: "force",
+      endurance: "resolve",
+      force: "stride",
+      resolve: "insight",
+      insight: "resolve"
+    };
+    const secondaryTarget = secondaryMap[stat];
+    if (secondaryTarget) {
+      const secondaryChance = 0.25 + secondaryBonus * 0.5 + legendaryLuck * 0.3;
+      if (Math.random() < secondaryChance) {
+        const secondaryGain = Math.max(1, Math.round(gain * (0.2 + secondaryBonus * 0.3)));
+        state.avatar.stats[secondaryTarget] = clamp(
+          (state.avatar.stats[secondaryTarget] || 0) + secondaryGain,
+          0,
+          100
+        );
+        addTrainingLog(
+          `Secondary aptitude improved (${capitalize(secondaryTarget)} +${secondaryGain}).`,
+          "info"
+        );
+      }
+    }
+
     state.avatar.sessions -= 1;
     state.lastTrainedStat = stat;
     addTrainingLog(`Focused on ${capitalize(stat)}: +${gain} points.`);
@@ -488,7 +556,29 @@
       );
     }
 
-    tryUnlockSkill(stat);
+    updateAvatarProfile();
+
+    const afterProfile = state.avatar.profile || buildRacingProfile(state.avatar.stats);
+    if (beforeProfile && afterProfile) {
+      const passingDiff =
+        (afterProfile.aptitudes?.passing?.rating || 0) -
+        (beforeProfile.aptitudes?.passing?.rating || 0);
+      if (passingDiff >= 2) {
+        addTrainingLog(`Passing aptitude improved by ${passingDiff} points.`, "info");
+      }
+      const beforeDistance = beforeProfile.aptitudes?.distance?.type;
+      const afterDistance = afterProfile.aptitudes?.distance?.type;
+      if (afterDistance && afterDistance !== beforeDistance) {
+        addTrainingLog(`Distance aptitude now favors ${afterDistance} runs.`, "success");
+      }
+      const phaseBefore = beforeProfile.aptitudes?.phase?.focus;
+      const phaseAfter = afterProfile.aptitudes?.phase?.focus;
+      if (phaseAfter && phaseAfter !== phaseBefore) {
+        addTrainingLog(`Race phase focus shifted toward the ${phaseAfter}.`, "info");
+      }
+    }
+
+    tryUnlockSkill(stat, modifiers);
     Storage.saveCurrentAvatar(state.avatar);
     refreshUI();
 
@@ -497,17 +587,25 @@
     }
   }
 
-  function tryUnlockSkill(stat) {
+  function tryUnlockSkill(stat, modifiers = {}) {
     if (state.avatar.skills.length >= 3) return;
 
     const insight = state.avatar.stats.insight;
     let chance = 0.1 + Math.max(0, insight - 40) * 0.005;
     chance += state.avatar.modifiers?.skillChanceBonus || 0;
-    chance = clamp(chance, 0, 0.9);
+    if (modifiers.legendaryLuck) {
+      chance += modifiers.legendaryLuck * 0.4;
+    }
+    chance = clamp(chance, 0, 0.95);
 
     if (Math.random() < chance) {
       const existingNames = state.avatar.skills.map((s) => s.name);
-      const newSkill = pickRandomSkill(existingNames);
+      const rarityBias = clamp(
+        (modifiers.legendaryLuck || 0) * 1.1 + (modifiers.secondaryBonus || 0) * 0.4,
+        0,
+        0.8
+      );
+      const newSkill = pickRandomSkill(existingNames, rarityBias);
       if (newSkill) {
         state.avatar.skills.push(newSkill);
         addTrainingLog(`Unlocked skill: ${newSkill.name}!`, "success");
@@ -537,7 +635,9 @@
       tokenId: state.tokenId,
       retiredAt: Date.now(),
       mood: state.avatar.mood,
-      style: state.avatar.style
+      style: state.avatar.style,
+      aptitudes: deepClone(state.avatar.aptitudes || {}),
+      profile: deepClone(state.avatar.profile || {})
     };
 
     state.legacyRecords = Storage.addLegacyRecord(record);
@@ -547,6 +647,8 @@
     state.tokenId = generateTokenId();
     state.trainingLog = [];
     state.lastTrainedStat = null;
+
+    updateAvatarProfile();
 
     Storage.saveCurrentAvatar(state.avatar);
     Storage.saveTokenId(state.tokenId);
@@ -589,7 +691,22 @@
   }
 
   function derivePerformanceBundle(stats) {
-    return derivePerformance(stats);
+    return buildRacingProfile(stats).performance;
+  }
+
+  function updateAvatarProfile({ persist = false } = {}) {
+    if (!state.avatar || !state.avatar.stats) return;
+    const profile = buildRacingProfile(state.avatar.stats);
+    state.avatar.profile = {
+      performance: { ...profile.performance },
+      aptitudes: deepClone(profile.aptitudes)
+    };
+    state.avatar.performance = { ...profile.performance };
+    state.avatar.aptitudes = deepClone(profile.aptitudes);
+    state.avatar.maneuverRating = profile.performance.maneuver;
+    if (persist) {
+      Storage.saveCurrentAvatar(state.avatar);
+    }
   }
 
   function applyStyleAdjustments(performance, style) {
@@ -762,6 +879,17 @@
           desired = midIndex;
         }
         scheduleStrategy(racer, race, 0.4, 0.7);
+      }
+
+      const phaseFocus = racer.aptitudes?.phase?.focus;
+      if (!blocked) {
+        if (phase === "final" && phaseFocus === "final" && energyPct > 40) {
+          desired = insideIndex;
+        } else if (phase === "start" && phaseFocus === "start") {
+          desired = insideIndex;
+        } else if (phase === "middle" && phaseFocus === "middle") {
+          desired = midIndex;
+        }
       }
 
       const biasSource = racer.zoneBiasActive ?? racer.zoneBiasPassive;
@@ -944,22 +1072,27 @@
   function createRaceConfig() {
     const seed = Date.now();
     const seedRng = createSeededRng(seed);
+    updateAvatarProfile();
     const aiBlueprints = Array.from({ length: 3 }, (_, index) =>
       createAIRacer(index, state.avatar.stats, seedRng)
-    );
+    ).map((blueprint) => deepClone(blueprint));
+
+    const playerProfile = state.avatar.profile || buildRacingProfile(state.avatar.stats);
 
     return {
       seed,
       aiBlueprints,
-        playerSnapshot: {
-          name: state.avatar.name,
-          stats: deepClone(state.avatar.stats),
-          skills: deepClone(state.avatar.skills),
-          modifiers: deepClone(state.avatar.modifiers || { trainingBonus: 0, skillChanceBonus: 0 }),
-          mood: state.avatar.mood,
-          style: state.avatar.style,
-          performance: derivePerformanceBundle(state.avatar.stats)
-        }
+      playerSnapshot: {
+        name: state.avatar.name,
+        stats: deepClone(state.avatar.stats),
+        skills: deepClone(state.avatar.skills),
+        modifiers: deepClone(state.avatar.modifiers || { trainingBonus: 0, skillChanceBonus: 0 }),
+        mood: state.avatar.mood,
+        style: state.avatar.style,
+        performance: deepClone(playerProfile.performance),
+        aptitudes: deepClone(playerProfile.aptitudes),
+        profile: deepClone(playerProfile)
+      }
     };
   }
 
@@ -977,7 +1110,9 @@
       isPlayer: true,
       style: config.playerSnapshot.style || "Pacer",
       mood: config.playerSnapshot.mood,
-      performance: config.playerSnapshot.performance
+      performance: config.playerSnapshot.performance,
+      profile: config.playerSnapshot.profile,
+      aptitudes: config.playerSnapshot.aptitudes
     });
     player.startAggro = rng();
     const playerDecisionFactor = clamp(player.zoneDecisionFactorBase ?? 1, 0.5, 1.3);
@@ -996,7 +1131,9 @@
         style: blueprint.style || blueprint.styleName || "Pacer",
         styleName: blueprint.styleName,
         mood: blueprint.mood,
-        performance: blueprint.performance
+        performance: blueprint.performance,
+        profile: blueprint.profile,
+        aptitudes: blueprint.aptitudes
       });
       aiRacer.startAggro = rng();
       const aiDecisionFactor = clamp(aiRacer.zoneDecisionFactorBase ?? 1, 0.5, 1.3);
@@ -1040,13 +1177,19 @@
     style,
     styleName,
     mood,
-    performance
+    performance,
+    profile,
+    aptitudes
   }) {
     const maxEnergy = 100 + stats.endurance * 10;
     const useStyle = style || "Pacer";
     const styleLabel = styleName || useStyle;
-    const perf = performance ? { ...performance } : derivePerformanceBundle(stats, useStyle);
-    const maneuverAdjusted = applyStyleAdjustments(perf, useStyle);
+    const baseProfile = profile ? deepClone(profile) : buildRacingProfile(stats);
+    const perfSource = performance ? { ...performance } : { ...baseProfile.performance };
+    const baseAptitudes = aptitudes
+      ? deepClone(aptitudes)
+      : baseProfile.aptitudes || deriveAptitudes(stats, perfSource);
+    const maneuverAdjusted = applyStyleAdjustments(perfSource, useStyle);
     const baseSpeed = Math.max(4, 3.2 + maneuverAdjusted.speed * 0.05);
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
@@ -1083,6 +1226,11 @@
       energyHistory: [{ time: 0, energy: 100 }],
       energySampleTimer: 0,
       performance: maneuverAdjusted,
+      profile: {
+        performance: perfSource,
+        aptitudes: deepClone(baseAptitudes)
+      },
+      aptitudes: deepClone(baseAptitudes),
       baseSpeed,
       maxSpeed,
       acceleration,
@@ -1113,6 +1261,7 @@
       zoneDecisionFactorActive: 1
     };
     applyPassiveSkills(racerObj);
+    applyAptitudeModifiers(racerObj);
     initializeZoneState(racerObj, DEFAULT_ZONE_INDEX);
     return racerObj;
   }
@@ -1234,6 +1383,53 @@
     }
     racer.acceleration *= racer.adaptiveFactor;
     racer.handlingPenaltyActive = racer.handlingPenaltyBase;
+  }
+
+  function applyAptitudeModifiers(racer) {
+    const apt = racer.aptitudes || {};
+    if (apt.staminaReserve != null) {
+      racer.staminaShieldBase = Math.min(racer.staminaShieldBase, apt.staminaReserve);
+      racer.staminaShieldActive = racer.staminaShieldBase;
+    }
+    if (apt.focusDiscipline != null) {
+      racer.focusDrainFactorBase *= apt.focusDiscipline;
+      racer.focusDrainFactorActive = racer.focusDrainFactorBase;
+    }
+    if (apt.distance?.score) {
+      const distanceBoost = clamp((apt.distance.score - 60) / 400, -0.05, 0.08);
+      const accelBoost = clamp((apt.distance.score - 60) / 500, -0.04, 0.06);
+      racer.baseSpeed *= 1 + distanceBoost;
+      racer.maxSpeed *= 1 + distanceBoost;
+      racer.acceleration *= 1 + accelBoost;
+    }
+    if (apt.surface?.adaptability != null) {
+      const surfaceFactor = clamp(1 - (apt.surface.adaptability - 60) / 300, 0.85, 1.1);
+      racer.energyDrainFactor *= surfaceFactor;
+      racer.energyDrainFactor = clamp(racer.energyDrainFactor, 0.4, 1.2);
+    }
+    if (apt.decisionFactor != null) {
+      const factor = clamp(apt.decisionFactor, 0.5, 1.3);
+      racer.zoneDecisionFactorBase = factor;
+      racer.zoneDecisionFactorActive = factor;
+    }
+    if (apt.passing?.rating) {
+      const passingDelta = clamp((apt.passing.rating - 60) / 400, -0.05, 0.12);
+      racer.passBonus += passingDelta;
+      const insightBoost = clamp((apt.passing.rating - 65) / 500, -0.02, 0.08);
+      racer.insightBonusBase += insightBoost;
+      racer.insightBonusActive = racer.insightBonusBase;
+    }
+    if (apt.passing?.laneBias && !racer.zoneBiasPassive) {
+      racer.zoneBiasPassive = apt.passing.laneBias;
+      racer.zoneBiasPhase = apt.phase?.focus || racer.zoneBiasPhase;
+    }
+    if (apt.passing?.aggression) {
+      const aggro = clamp((apt.passing.aggression - 40) / 120, 0, 1);
+      racer.startAggro = Math.max(racer.startAggro || 0, aggro);
+    }
+    racer.passBonus = clamp(racer.passBonus, -0.05, 0.5);
+    racer.focusDrainFactorBase = clamp(racer.focusDrainFactorBase, 0.4, 1.2);
+    racer.focusDrainFactorActive = clamp(racer.focusDrainFactorActive, 0.4, 1.2);
   }
 
   function spendStamina(racer, amount, reason, race) {
@@ -1520,6 +1716,8 @@
         } else if (racer.style === "Sprinter" && phase === "final") {
           chance += 0.15;
         }
+        const baseline = 0.45 + (racer.insightBonusActive || 0);
+        chance = Math.max(chance, baseline);
       }
 
       chance = clamp(chance, 0, 0.95);
