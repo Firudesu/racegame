@@ -20,7 +20,7 @@
     sessions: document.getElementById("avatar-sessions"),
     legacyFlag: document.getElementById("legacy-flag"),
     skillList: document.getElementById("skill-list"),
-    legacyInfo: document.getElementById("legacy-info"),
+    legacyList: document.getElementById("legacy-list"),
     trainingLog: document.getElementById("training-log"),
     hudPhase: document.getElementById("hud-phase"),
     hudTimer: document.getElementById("hud-timer"),
