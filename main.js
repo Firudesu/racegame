@@ -113,9 +113,12 @@
 
   const ZONE_COUNT = TRACK_ZONES.length;
   const LANE_COUNT = ZONE_COUNT;
+  const DEFAULT_ZONE_INDEX = Math.floor(ZONE_COUNT / 2);
   const ZONE_CHANGE_RATE = 2.6;
   const PASS_DISTANCE_THRESHOLD = 24;
   const PASS_COOLDOWN = 1.2;
+  const START_PHASE_LIMIT = 0.25;
+  const FINAL_PHASE_START = 0.8;
   const STYLE_PHASE_MAP = Object.fromEntries(
     Object.entries(RACING_STYLES).map(([key, def]) => [key, def.phaseBonus])
   );
@@ -601,7 +604,7 @@
     return 1 + bonus;
   }
 
-  function initializeZoneState(racer, zoneIndex = Math.floor(ZONE_COUNT / 2)) {
+  function initializeZoneState(racer, zoneIndex = DEFAULT_ZONE_INDEX) {
     const idx = Math.max(0, Math.min(ZONE_COUNT - 1, zoneIndex));
     const zone = TRACK_ZONES[idx];
     racer.zoneIndex = idx;
@@ -622,13 +625,13 @@
     racer.targetZone = Math.round(Math.max(0, Math.min(ZONE_COUNT - 1, racer.targetZone)));
 
     if (racer.zoneIndex === racer.targetZone) {
-      const zone = TRACK_ZONES[racer.zoneIndex] || TRACK_ZONES[Math.floor(ZONE_COUNT / 2)];
+      const zone = TRACK_ZONES[racer.zoneIndex] || TRACK_ZONES[DEFAULT_ZONE_INDEX];
       racer.zoneOffset = zone.radiusOffset;
       racer.distanceMultiplier = zone.distanceMultiplier;
       racer.zoneBlend = 0;
     } else {
-      const fromZone = TRACK_ZONES[racer.zoneIndex] || TRACK_ZONES[0];
-      const toZone = TRACK_ZONES[racer.targetZone] || TRACK_ZONES[TRACK_ZONES.length - 1];
+      const fromZone = TRACK_ZONES[racer.zoneIndex] || TRACK_ZONES[DEFAULT_ZONE_INDEX];
+      const toZone = TRACK_ZONES[racer.targetZone] || TRACK_ZONES[DEFAULT_ZONE_INDEX];
       racer.zoneBlend = Math.min(1, (racer.zoneBlend || 0) + ZONE_CHANGE_RATE * dt);
       racer.zoneOffset = lerp(fromZone.radiusOffset, toZone.radiusOffset, racer.zoneBlend);
       racer.distanceMultiplier = lerp(fromZone.distanceMultiplier, toZone.distanceMultiplier, racer.zoneBlend);
@@ -644,7 +647,7 @@
   }
 
   function assignInitialLanes(racers) {
-    const center = Math.floor(ZONE_COUNT / 2);
+    const center = DEFAULT_ZONE_INDEX;
     let cursor = 0;
     racers.forEach((racer) => {
       const zone = racer.isPlayer ? center : cursor++ % ZONE_COUNT;
@@ -676,22 +679,111 @@
     });
   }
 
+  function decideZoneTargets(race, dt) {
+    const leaderboard = race.leaderboard || [];
+    const insideIndex = 0;
+    const midIndex = DEFAULT_ZONE_INDEX;
+    const outsideIndex = ZONE_COUNT - 1;
+
+    race.racers.forEach((racer) => {
+      if (racer.finished) return;
+      racer.strategyCooldown = Math.max(0, (racer.strategyCooldown || 0) - dt);
+      if (racer.strategyCooldown > 0) return;
+
+      const progress = (racer.distance % TRACK_LENGTH) / TRACK_LENGTH;
+      const energyPct = (racer.energy / racer.maxEnergy) * 100;
+      const blocked = isBlockedAhead(racer, race);
+      const rank = getRank(racer, leaderboard);
+      let desired = racer.targetZone ?? racer.zoneIndex ?? midIndex;
+
+      if (progress < START_PHASE_LIMIT) {
+        const accelScore = racer.stats.stride + racer.stats.force;
+        if (accelScore > 135 || (racer.startAggro || 0) > 0.55) {
+          desired = insideIndex;
+        } else if (accelScore < 105) {
+          desired = midIndex;
+        } else {
+          desired = sampleRng(race) > 0.5 ? insideIndex : midIndex;
+        }
+        racer.strategyCooldown = randomBetween(race, 0.2, 0.5);
+      } else if (progress < FINAL_PHASE_START) {
+        if (blocked) {
+          if (racer.stats.insight > 60 && racer.performance.maneuver > 55) {
+            desired = Math.min(outsideIndex, (racer.zoneIndex ?? midIndex) + 1);
+          } else if (racer.stats.resolve > 65) {
+            desired = racer.zoneIndex ?? midIndex;
+          } else {
+            desired = Math.max(midIndex, Math.min(outsideIndex, racer.zoneIndex ?? midIndex));
+          }
+        } else {
+          if ((racer.zoneIndex ?? midIndex) !== insideIndex && energyPct > 50) {
+            desired = insideIndex;
+          } else if (energyPct < 35) {
+            desired = midIndex;
+          }
+        }
+        racer.strategyCooldown = randomBetween(race, 0.8, 1.4);
+      } else {
+        desired = outsideIndex;
+        if (rank === 1 && !blocked && energyPct > 35) {
+          desired = insideIndex;
+        }
+        if (energyPct < 25) {
+          desired = midIndex;
+        }
+        racer.strategyCooldown = randomBetween(race, 0.4, 0.7);
+      }
+
+      desired = Math.max(0, Math.min(outsideIndex, desired));
+      if (desired !== racer.targetZone) {
+        racer.targetZone = desired;
+        racer.zoneBlend = 0;
+      }
+    });
+  }
+
+  function isBlockedAhead(racer, race) {
+    const threshold = 18;
+    for (const other of race.racers) {
+      if (other === racer || other.finished) continue;
+      const gap = (other.distance - racer.distance + TRACK_LENGTH) % TRACK_LENGTH;
+      if (gap <= 0 || gap > threshold) continue;
+      const zoneSeparation = Math.abs((other.zoneOffset || 0) - (racer.zoneOffset || 0));
+      if (zoneSeparation < 24) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function getRank(racer, leaderboard) {
+    if (!leaderboard || !leaderboard.length) return Number.POSITIVE_INFINITY;
+    const index = leaderboard.findIndex((entry) => entry.id === racer.id);
+    return index >= 0 ? index + 1 : leaderboard.length + 1;
+  }
+
   function attemptPass(behind, ahead, race) {
     const racerStyle = behind.style || "Pacer";
     let passChance = clamp(behind.performance.maneuver / 100 + (behind.passBonus || 0), 0.05, 0.99);
     if (behind.predictive) {
       passChance = Math.min(0.99, passChance + 0.05);
     }
+
     const maneuverAdvantage = behind.performance.maneuver >= ahead.performance.maneuver + 2;
     const speedAdvantage = behind.performance.speed >= ahead.performance.speed + 2;
-    const roll = race.rng();
+    const progress = (behind.distance % TRACK_LENGTH) / TRACK_LENGTH;
+    if (progress >= FINAL_PHASE_START) {
+      passChance = Math.min(0.99, passChance + (behind.stats.force + behind.stats.insight) / 400);
+    }
+
+    const roll = sampleRng(race);
     let success = maneuverAdvantage || speedAdvantage || roll < passChance;
 
     const cooldown = PASS_COOLDOWN * (behind.cooldownFactor || 1);
     behind.passCooldown = cooldown;
 
     if (success && ahead.defenseBonus) {
-      const defenseRoll = race.rng();
+      const defenseRoll = sampleRng(race);
       if (defenseRoll < ahead.defenseBonus) {
         success = false;
         console.log(
@@ -703,7 +795,7 @@
     }
 
     if (success && ahead.blocker) {
-      const blockRoll = race.rng();
+      const blockRoll = sampleRng(race);
       if (blockRoll < 0.45) {
         success = false;
         console.log(
@@ -742,21 +834,24 @@
         behind.zoneOffset = zoneInfo.radiusOffset;
         behind.distanceMultiplier = zoneInfo.distanceMultiplier;
       }
+      behind.zoneBlend = 0;
       behind.lane = chosenLane;
       behind.distance += 1;
       behind.passCooldown = cooldown;
+      behind.strategyCooldown = randomBetween(race, 0.3, 0.6);
       console.log(
-        `%cPass Success%c ${behind.name} (${racerStyle}) moved to lane ${behind.lane}`,
+        `%cPass Success%c ${behind.name} (${racerStyle}) moved to ${TRACK_ZONES[behind.lane]?.display || "outer lane"}`,
         "color:#58d68d; font-weight:bold;",
         "color:#d0d3e8"
       );
     } else {
-      let slowdown = 0.95 - race.rng() * 0.05;
+      let slowdown = 0.95 - sampleRng(race) * 0.05;
       if (behind.recoveryFactor) {
         const penalty = 1 - slowdown;
         slowdown = 1 - penalty * behind.recoveryFactor;
       }
       behind.speed *= slowdown;
+      behind.strategyCooldown = randomBetween(race, 0.5, 0.8);
       console.log(
         `%cPass Blocked%c ${behind.name} (${racerStyle}) slowed (${(slowdown * 100).toFixed(0)}%)`,
         "color:#f85149; font-weight:bold;",
@@ -833,24 +928,27 @@
       mood: config.playerSnapshot.mood,
       performance: config.playerSnapshot.performance
     });
+    player.startAggro = rng();
+    player.strategyCooldown = 0.2 + rng() * 0.3;
     racers.push(player);
 
     config.aiBlueprints.forEach((blueprint, index) => {
-      racers.push(
-        buildRacer({
-          id: `ai-${index}`,
-          name: blueprint.name,
-          color: blueprint.color,
-          stats: blueprint.stats,
-          skills: blueprint.skills,
-          modifiers: blueprint.modifiers,
-          isPlayer: false,
-          style: blueprint.style || blueprint.styleName || "Pacer",
-          styleName: blueprint.styleName,
-          mood: blueprint.mood,
-          performance: blueprint.performance
-        })
-      );
+      const aiRacer = buildRacer({
+        id: `ai-${index}`,
+        name: blueprint.name,
+        color: blueprint.color,
+        stats: blueprint.stats,
+        skills: blueprint.skills,
+        modifiers: blueprint.modifiers,
+        isPlayer: false,
+        style: blueprint.style || blueprint.styleName || "Pacer",
+        styleName: blueprint.styleName,
+        mood: blueprint.mood,
+        performance: blueprint.performance
+      });
+      aiRacer.startAggro = rng();
+      aiRacer.strategyCooldown = 0.3 + rng() * 0.5;
+      racers.push(aiRacer);
     });
 
     assignInitialLanes(racers);
@@ -936,10 +1034,12 @@
       acceleration,
       lane: 0,
       passCooldown: 0,
+      strategyCooldown: 0,
+      startAggro: 0,
       lastPhaseLogged: null
     };
     applyPassiveSkills(racerObj);
-    initializeZoneState(racerObj, Math.floor(ZONE_COUNT / 2));
+    initializeZoneState(racerObj, DEFAULT_ZONE_INDEX);
     return racerObj;
   }
 
@@ -1101,8 +1201,9 @@
   function logRaceRoster(race) {
     if (!console.table) {
       race.racers.forEach((racer) => {
+        const zoneLabel = TRACK_ZONES[Math.max(0, Math.min(TRACK_ZONES.length - 1, racer.zoneIndex ?? DEFAULT_ZONE_INDEX))]?.display || "Mid Track";
         console.log(
-          `${racer.name} | Style ${racer.style} | Lane ${racer.lane} | Speed ${racer.performance.speed} | Handling ${racer.performance.handling} | Maneuver ${racer.performance.maneuver}`
+          `${racer.name} | Style ${racer.style} | Zone ${zoneLabel} | Speed ${racer.performance.speed} | Handling ${racer.performance.handling} | Maneuver ${racer.performance.maneuver}`
         );
       });
       return;
@@ -1111,7 +1212,7 @@
     const summary = race.racers.map((racer) => ({
       Name: racer.name,
       Style: racer.style,
-      Zone: TRACK_ZONES[Math.max(0, Math.min(TRACK_ZONES.length - 1, racer.zoneIndex ?? 1))]?.display || "Mid Track",
+      Zone: TRACK_ZONES[Math.max(0, Math.min(TRACK_ZONES.length - 1, racer.zoneIndex ?? DEFAULT_ZONE_INDEX))]?.display || "Mid Track",
       Speed: racer.performance.speed,
       Handling: racer.performance.handling,
       Maneuver: racer.performance.maneuver
@@ -1124,6 +1225,9 @@
     if (!race || !race.running) return;
 
     race.time += dt;
+
+    updateLeaderboard(race);
+    decideZoneTargets(race, dt);
 
     const activeRacers = race.racers.filter((r) => !r.finished);
     const player = race.racers.find((r) => r.isPlayer);
@@ -1160,7 +1264,7 @@
     updateZoneState(racer, dt);
 
     const progress = (racer.distance % TRACK_LENGTH) / TRACK_LENGTH;
-    const phase = progress < 0.25 ? "start" : progress < 0.75 ? "middle" : "final";
+    const phase = progress < START_PHASE_LIMIT ? "start" : progress < FINAL_PHASE_START ? "middle" : "final";
 
     if (phase !== racer.phase) {
       racer.phase = phase;
@@ -1174,7 +1278,7 @@
     const resolveBoost = phase === "final" && racer.stats.resolve > 40 ? 1 + (racer.stats.resolve - 40) * 0.005 : 1;
     const moodPercent = clamp(Math.round(racer.mood ?? 70), 0, 120);
     const moodMultiplier = 1 + (moodPercent - 70) * 0.0015;
-    const jitterRange = (race.rng() - 0.5) * 0.06 * (racer.jitterFactor || 1);
+    const jitterRange = (sampleRng(race) - 0.5) * 0.06 * (racer.jitterFactor || 1);
     const rngJitter = 1 + jitterRange + racer.rngModifier;
     const slipstreamMultiplier = computeSlipstreamMultiplier(racer, race);
 
@@ -1249,7 +1353,7 @@
 
         chance = clamp(chance, 0, 0.95);
 
-        if (race.rng() < chance) {
+        if (sampleRng(race) < chance) {
           skill.active = true;
           skill.timer = skill.duration;
           skill.used = true;
@@ -1588,6 +1692,14 @@
 
   function lerp(a, b, t) {
     return a + (b - a) * Math.max(0, Math.min(1, t));
+  }
+
+  function sampleRng(race) {
+    return race && typeof race.rng === "function" ? race.rng() : Math.random();
+  }
+
+  function randomBetween(race, min, max) {
+    return min + (max - min) * sampleRng(race);
   }
 
   function capitalize(word) {
