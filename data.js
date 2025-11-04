@@ -394,12 +394,25 @@
     };
   }
 
-  function derivePerformance(stats) {
-    const speed = clamp(Math.round(stats.stride * 0.65 + stats.force * 0.35), 25, 100);
-    const handling = clamp(Math.round(stats.resolve * 0.45 + stats.insight * 0.55), 25, 100);
-    const maneuver = clamp(Math.round(stats.force * 0.4 + stats.insight * 0.6), 25, 100);
-    return { speed, handling, maneuver };
-  }
+    const STAT_CURVE_EXPONENT = 1.2;
+
+    function applyStatCurve(value) {
+      const clamped = clamp(value || 0, 0, 100);
+      const normalized = clamped / 100;
+      const curved = Math.pow(normalized, STAT_CURVE_EXPONENT) * 100;
+      return curved;
+    }
+
+    function derivePerformance(stats) {
+      const stride = applyStatCurve(stats.stride);
+      const force = applyStatCurve(stats.force);
+      const resolve = applyStatCurve(stats.resolve);
+      const insight = applyStatCurve(stats.insight);
+      const speed = clamp(Math.round(stride * 0.65 + force * 0.35), 25, 100);
+      const handling = clamp(Math.round(resolve * 0.45 + insight * 0.55), 25, 100);
+      const maneuver = clamp(Math.round(force * 0.4 + insight * 0.6), 25, 100);
+      return { speed, handling, maneuver };
+    }
 
     function deriveAptitudes(stats, performance = derivePerformance(stats)) {
       const stride = clamp(stats.stride || 0, 0, 100);

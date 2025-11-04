@@ -1220,6 +1220,7 @@
     player.startAggro = rng();
     const playerDecisionFactor = clamp(player.zoneDecisionFactorBase ?? 1, 0.5, 1.3);
     player.strategyCooldown = (0.2 + rng() * 0.3) * playerDecisionFactor;
+    applyRacePerformanceAdjustments(player, rng);
     racers.push(player);
 
     config.aiBlueprints.forEach((blueprint, index) => {
@@ -1241,6 +1242,7 @@
       aiRacer.startAggro = rng();
       const aiDecisionFactor = clamp(aiRacer.zoneDecisionFactorBase ?? 1, 0.5, 1.3);
       aiRacer.strategyCooldown = (0.3 + rng() * 0.5) * aiDecisionFactor;
+      applyRacePerformanceAdjustments(aiRacer, rng);
       racers.push(aiRacer);
     });
 
@@ -1874,6 +1876,9 @@
   }
 
   function maybeTriggerSkills(racer, phase, race) {
+      if (racer.simpleSkillMode) {
+        return;
+      }
     racer.skills.forEach((skill) => {
       if (skill.type && skill.type !== "active") return;
       if (!skill.trigger) return;
@@ -2284,6 +2289,91 @@
   function randomBetween(race, min, max) {
     return min + (max - min) * sampleRng(race);
   }
+
+    function sampleRandom(source) {
+      if (typeof source === "function") {
+        return Math.min(Math.max(source(), 0), 1);
+      }
+      if (source) {
+        return sampleRng(source);
+      }
+      return Math.random();
+    }
+
+    function randomVariance(min, max, source) {
+      if (min > max) {
+        return randomVariance(max, min, source);
+      }
+      const rand = sampleRandom(source);
+      return min + (max - min) * rand;
+    }
+
+    function computeRacePerformanceScore(racer, source) {
+      const stats = racer.stats || {};
+      const stride = Math.pow(clamp(stats.stride || 0, 0, 100), 1.2);
+      const endurance = Math.pow(clamp(stats.endurance || 0, 0, 100), 1.2);
+      const force = Math.pow(clamp(stats.force || 0, 0, 100), 1.2);
+      const resolve = Math.pow(clamp(stats.resolve || 0, 0, 100), 1.2);
+      const insight = Math.pow(clamp(stats.insight || 0, 0, 100), 1.2);
+
+      let score =
+        stride * 0.25 +
+        endurance * 0.25 +
+        force * 0.15 +
+        resolve * 0.15 +
+        insight * 0.2;
+
+      score += randomVariance(-20, 20, source);
+
+      const skillTriggerChance = clamp(0.2 + (clamp(stats.insight || 0, 0, 100) / 500), 0.2, 0.4);
+      const roll = sampleRandom(source);
+      let skillTriggered = false;
+      let skillBoost = 0;
+      if (roll < skillTriggerChance) {
+        skillBoost = 25 + randomVariance(-5, 5, source);
+        score += skillBoost;
+        skillTriggered = true;
+      }
+
+      return {
+        score,
+        skillTriggered,
+        skillBoost,
+        skillTriggerChance
+      };
+    }
+
+    function applyRacePerformanceAdjustments(racer, rngSource) {
+      if (!racer || !racer.stats) return;
+      const result = computeRacePerformanceScore(racer, rngSource);
+      racer.performanceScore = result.score;
+      racer.skillTriggerChance = result.skillTriggerChance;
+      racer.skillTriggered = result.skillTriggered;
+      racer.skillBoostApplied = result.skillBoost;
+      racer.simpleSkillMode = true;
+
+      const baseline = 160;
+      const diff = result.score - baseline;
+      const speedMultiplier = clamp(1 + diff / 260, 0.65, 1.45);
+      const accelMultiplier = clamp(1 + diff / 350, 0.7, 1.35);
+
+      racer.baseSpeed *= speedMultiplier;
+      racer.maxSpeed *= speedMultiplier;
+      racer.acceleration *= accelMultiplier;
+      racer.rngModifier = clamp(diff / 600, -0.25, 0.25);
+
+      if (!Array.isArray(racer.skillLog)) {
+        racer.skillLog = [];
+      }
+
+      if (racer.skillTriggered) {
+        const label = "Decisive Burst";
+        racer.skillLog.push({ name: label, time: 0, phase: "boost" });
+        racer.skillToast = { name: label, timer: 1.5 };
+      } else {
+        racer.skillToast = null;
+      }
+    }
 
   function capitalize(word) {
     return word.charAt(0).toUpperCase() + word.slice(1);
