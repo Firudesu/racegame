@@ -273,53 +273,53 @@
     return deepClone(selected);
   }
 
-  function createBaseAvatar({ legacyBonus = false, legacyData = null } = {}) {
-    const baseStats = {
-      stride: 60,
-      endurance: 55,
-      force: 48,
-      resolve: 42,
-      insight: 50
-    };
+    function createBaseAvatar({ legacyBonus = false, legacyData = null } = {}) {
+      const baseStats = {
+        stride: 60,
+        endurance: 55,
+        force: 48,
+        resolve: 42,
+        insight: 50
+      };
 
-    if (legacyData) {
-      for (const key of Object.keys(baseStats)) {
-        baseStats[key] = clamp(Math.round((baseStats[key] + legacyData.stats[key]) / 2), 35, 80);
+      if (legacyData) {
+        for (const key of Object.keys(baseStats)) {
+          baseStats[key] = clamp(Math.round((baseStats[key] + legacyData.stats[key]) / 2), 35, 80);
+        }
       }
+
+      const modifiers = {
+        trainingBonus: legacyBonus ? 0.12 : 0.05,
+        skillChanceBonus: legacyBonus ? 0.12 : 0.05,
+        legendaryLuck: legacyBonus ? 0.25 : 0.08,
+        secondaryBonus: legacyBonus ? 0.2 : 0.08
+      };
+
+      const baseMood = legacyData
+        ? clamp(Math.round((legacyData.mood ?? 75) * 0.6 + 30), 50, 98)
+        : legacyBonus
+        ? 85
+        : 75;
+
+      const profile = buildRacingProfile(baseStats, modifiers);
+
+      return {
+        name: randomName(),
+        sessions: 5,
+        stats: baseStats,
+        skills: [],
+        mood: baseMood,
+        modifiers,
+        legacy: legacyBonus,
+        createdAt: Date.now(),
+        version: 3,
+        performance: profile.performance,
+        aptitudes: profile.aptitudes,
+        profile
+      };
     }
 
-    const modifiers = {
-      trainingBonus: legacyBonus ? 0.12 : 0.05,
-      skillChanceBonus: legacyBonus ? 0.12 : 0.05,
-      legendaryLuck: legacyBonus ? 0.25 : 0.08,
-      secondaryBonus: legacyBonus ? 0.2 : 0.08
-    };
-
-    const baseMood = legacyData
-      ? clamp(Math.round((legacyData.mood ?? 75) * 0.6 + 30), 50, 98)
-      : legacyBonus
-      ? 85
-      : 75;
-
-    const profile = buildRacingProfile(baseStats);
-
-    return {
-      name: randomName(),
-      sessions: 5,
-      stats: baseStats,
-      skills: [],
-      mood: baseMood,
-      modifiers,
-      legacy: legacyBonus,
-      createdAt: Date.now(),
-      version: 3,
-      performance: profile.performance,
-      aptitudes: profile.aptitudes,
-      profile
-    };
-  }
-
-  function createAIRacer(index, playerStats, rng) {
+    function createAIRacer(index, playerStats, rng) {
     const stats = {};
     const variance = [
       { key: "stride", spread: 8 },
@@ -340,7 +340,7 @@
 
     const colors = ["#ef5350", "#fbc02d", "#ab47bc"];
 
-    const profile = buildRacingProfile(stats);
+      const profile = buildRacingProfile(stats, { legendaryLuck: 0.1, secondaryBonus: 0.12 });
     const performance = profile.performance;
 
     const availableSkills = SKILL_LIBRARY.slice();
@@ -371,7 +371,14 @@
       }
     }
 
-    return {
+    if (assignedSkills.length < 2) {
+      const extra = pickSkill(() => true);
+      if (extra) {
+        assignedSkills.push(extra);
+      }
+    }
+
+      return {
       name: `AI-${index + 1}`,
       color: colors[index % colors.length],
       stats,
@@ -382,8 +389,8 @@
       modifiers: { trainingBonus: 0, skillChanceBonus: 0, legendaryLuck: 0.1, secondaryBonus: 0.12 },
       mood: clamp(Math.round(65 + (rng() - 0.5) * 30), 40, 95),
       performance,
-      aptitudes: profile.aptitudes,
-      profile
+        aptitudes: profile.aptitudes,
+        profile
     };
   }
 
@@ -445,10 +452,110 @@
       };
     }
 
-    function buildRacingProfile(stats) {
+    function deriveSecondaryStats(stats, modifiers = {}, aptitudes = null) {
+      const stride = clamp(stats.stride || 0, 0, 100);
+      const endurance = clamp(stats.endurance || 0, 0, 100);
+      const force = clamp(stats.force || 0, 0, 100);
+      const resolve = clamp(stats.resolve || 0, 0, 100);
+      const insight = clamp(stats.insight || 0, 0, 100);
+      const legendaryLuck = clamp(modifiers.legendaryLuck || 0, 0, 1);
+      const secondaryBonus = clamp(modifiers.secondaryBonus || 0, 0, 1);
+
+      const passingPower = clamp(
+        Math.round(force * 0.55 + stride * 0.25 + resolve * 0.15 + insight * 0.1) + Math.round(legendaryLuck * 18),
+        25,
+        100
+      );
+
+      const paceControl = clamp(
+        Math.round(endurance * 0.65 + insight * 0.35 + resolve * 0.2) + Math.round(secondaryBonus * 20),
+        25,
+        100
+      );
+
+      const aggression = clamp(
+        Math.round(force * 0.45 + resolve * 0.35 + stride * 0.2) + Math.round(legendaryLuck * 22),
+        20,
+        100
+      );
+
+      const tacticalInstinct = clamp(
+        Math.round(insight * 0.65 + endurance * 0.2 + stride * 0.15) + Math.round(legendaryLuck * 25),
+        25,
+        100
+      );
+
+      const fatigueResistance = clamp(
+        Math.round(resolve * 0.6 + endurance * 0.4) + Math.round(secondaryBonus * 18),
+        25,
+        100
+      );
+
+      const weatherSense = clamp(
+        Math.round(insight * 0.4 + resolve * 0.4 + endurance * 0.2) + Math.round(legendaryLuck * 15),
+        20,
+        100
+      );
+
+      const shortBurst = clamp(Math.round(stride * 0.55 + force * 0.45), 25, 100);
+      const midControl = clamp(Math.round(endurance * 0.6 + insight * 0.4), 25, 100);
+      const finalKick = clamp(Math.round(resolve * 0.55 + force * 0.45), 25, 100);
+
+      const maneuverBase = clamp(Math.round(force * 0.35 + insight * 0.55 + stride * 0.1), 25, 100);
+      const preferredLane = aptitudes?.passing?.laneBias || (maneuverBase >= 68 ? "inside" : maneuverBase <= 52 ? "outside" : "mid");
+      const insideRating = clamp(
+        maneuverBase + Math.round((force - 60) * 0.25) + (preferredLane === "inside" ? 6 : 0),
+        25,
+        100
+      );
+      const midRating = clamp(maneuverBase + (preferredLane === "mid" ? 4 : 0), 25, 100);
+      const outsideRating = clamp(
+        maneuverBase + Math.round((insight - 60) * 0.2) + (preferredLane === "outside" ? 6 : 0),
+        25,
+        100
+      );
+
+      const skillProc = clamp(
+        Math.round(insight * 0.55 + resolve * 0.25 + stride * 0.15) + Math.round((legendaryLuck + secondaryBonus) * 40),
+        25,
+        100
+      );
+
+      const upgradeMomentum = clamp(
+        1 + (stride + endurance + insight - 180) / 600 + legendaryLuck * 0.4 + secondaryBonus * 0.3,
+        0.8,
+        1.6
+      );
+
+      return {
+        passingPower,
+        paceControl,
+        aggression,
+        tacticalInstinct,
+        fatigueResistance,
+        weatherSense,
+        phasePower: {
+          start: shortBurst,
+          middle: midControl,
+          final: finalKick
+        },
+        positioning: {
+          inside: insideRating,
+          mid: midRating,
+          outside: outsideRating,
+          preferred: preferredLane
+        },
+        maneuverBase,
+        skillProc,
+        upgradeMomentum
+      };
+    }
+
+    function buildRacingProfile(stats, modifiers = {}) {
       const performance = derivePerformance(stats);
       const aptitudes = deriveAptitudes(stats, performance);
-      return { performance, aptitudes };
+      const secondary = deriveSecondaryStats(stats, modifiers, aptitudes);
+      return { performance, aptitudes, secondary };
     }
 
   window.ProjectStrideData = {
@@ -463,6 +570,7 @@
     createAIRacer,
     derivePerformance,
     deriveAptitudes,
-    buildRacingProfile
+      deriveSecondaryStats,
+      buildRacingProfile
   };
 })();

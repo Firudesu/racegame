@@ -4,18 +4,19 @@
   const Data = window.ProjectStrideData;
   const Storage = window.ProjectStrideStorage;
 
-  const {
-    TRACK_LENGTH,
-    clamp,
-    deepClone,
-    createSeededRng,
-    pickRandomSkill,
-    createBaseAvatar,
-    createAIRacer,
-    RACING_STYLES,
-    buildRacingProfile,
-    deriveAptitudes
-  } = Data;
+    const {
+      TRACK_LENGTH,
+      clamp,
+      deepClone,
+      createSeededRng,
+      pickRandomSkill,
+      createBaseAvatar,
+      createAIRacer,
+      RACING_STYLES,
+      buildRacingProfile,
+      deriveAptitudes,
+      deriveSecondaryStats
+    } = Data;
 
   const elements = {
     tokenId: document.getElementById("token-id"),
@@ -287,12 +288,17 @@
       mods.secondaryBonus = state.avatar.legacy ? 0.2 : 0.08;
     }
 
-    if (!state.avatar.version || state.avatar.version < 3) {
-      state.avatar.version = 3;
-    }
+      if (!state.avatar.version || state.avatar.version < 3) {
+        state.avatar.version = 3;
+      }
 
-    updateAvatarProfile();
-    Storage.saveCurrentAvatar(state.avatar);
+      updateAvatarProfile({ persist: false });
+      if (!state.avatar.profile?.secondary) {
+        updateAvatarProfile({ persist: true });
+      } else {
+        state.avatar.secondary = deepClone(state.avatar.profile.secondary);
+        Storage.saveCurrentAvatar(state.avatar);
+      }
   }
 
   function updateMoodUI() {
@@ -494,133 +500,198 @@
     }
   }
 
-  function handleTrain(stat) {
-    if (state.avatar.sessions <= 0) {
-      addTrainingLog("No training sessions remaining.", "warn");
-      refreshUI();
-      return;
-    }
+    function handleTrain(stat) {
+      if (state.avatar.sessions <= 0) {
+        addTrainingLog("No training sessions remaining.", "warn");
+        refreshUI();
+        return;
+      }
 
-    updateAvatarProfile();
-    const beforeProfile = deepClone(state.avatar.profile || buildRacingProfile(state.avatar.stats));
-    const modifiers = state.avatar.modifiers || {};
-    const legendaryLuck = modifiers.legendaryLuck || 0;
-    const secondaryBonus = modifiers.secondaryBonus || 0;
+      updateAvatarProfile({ persist: false });
+      const baselineProfile =
+        state.avatar.profile || buildRacingProfile(state.avatar.stats, state.avatar.modifiers || {});
+      const beforeProfile = deepClone(baselineProfile);
+      const modifiers = state.avatar.modifiers || {};
+      const legendaryLuck = modifiers.legendaryLuck || 0;
+      const secondaryBonus = modifiers.secondaryBonus || 0;
+      const upgradeMomentum = beforeProfile?.secondary?.upgradeMomentum || 1;
+      const sameStat = state.lastTrainedStat === stat;
+      const penalty = sameStat ? 0.75 : 1;
+      const trainingBoost = 1 + (modifiers.trainingBonus || 0);
+      const variance = 0.75 + Math.random() * (0.5 + legendaryLuck * 0.6);
+      const legendBias = 1 + legendaryLuck * 0.55 + secondaryBonus * 0.35;
+      const momentumBias = clamp(1 + (upgradeMomentum - 1) * 0.8, 0.7, 1.7);
 
-    const sameStat = state.lastTrainedStat === stat;
-    const penalty = sameStat ? 0.75 : 1;
-    const bonus = 1 + (state.avatar.modifiers?.trainingBonus || 0);
-    const variance = 0.85 + Math.random() * (0.45 + legendaryLuck);
-    let gain = Math.round(
-      TRAINING_BASE_GAIN * penalty * bonus * (1 + secondaryBonus * 0.25) * variance
-    );
-    gain = Math.max(2, gain);
+      let gain = Math.round(
+        TRAINING_BASE_GAIN *
+          penalty *
+          trainingBoost *
+          (1 + secondaryBonus * 0.35) *
+          variance *
+          legendBias *
+          momentumBias
+      );
+      gain = clamp(gain, 2, 22);
 
-    playSfx("train");
+      playSfx("train");
 
-    state.avatar.stats[stat] = clamp(state.avatar.stats[stat] + gain, 0, 100);
+      state.avatar.stats[stat] = clamp(state.avatar.stats[stat] + gain, 0, 100);
 
-    const secondaryMap = {
-      stride: "force",
-      endurance: "resolve",
-      force: "stride",
-      resolve: "insight",
-      insight: "resolve"
-    };
-    const secondaryTarget = secondaryMap[stat];
-    if (secondaryTarget) {
-      const secondaryChance = 0.25 + secondaryBonus * 0.5 + legendaryLuck * 0.3;
-      if (Math.random() < secondaryChance) {
-        const secondaryGain = Math.max(1, Math.round(gain * (0.2 + secondaryBonus * 0.3)));
-        state.avatar.stats[secondaryTarget] = clamp(
-          (state.avatar.stats[secondaryTarget] || 0) + secondaryGain,
+      const secondaryMap = {
+        stride: "force",
+        endurance: "resolve",
+        force: "stride",
+        resolve: "insight",
+        insight: "resolve"
+      };
+      const synergyRatings = {
+        stride: beforeProfile?.secondary?.phasePower?.start ?? beforeProfile?.secondary?.passingPower ?? 60,
+        endurance: beforeProfile?.secondary?.paceControl ?? beforeProfile?.secondary?.phasePower?.middle ?? 60,
+        force: beforeProfile?.secondary?.passingPower ?? beforeProfile?.secondary?.maneuverBase ?? 60,
+        resolve: beforeProfile?.secondary?.fatigueResistance ?? beforeProfile?.secondary?.phasePower?.final ?? 60,
+        insight: beforeProfile?.secondary?.tacticalInstinct ?? beforeProfile?.secondary?.maneuverBase ?? 60
+      };
+      const secondaryTarget = secondaryMap[stat];
+      if (secondaryTarget) {
+        const synergyRating = clamp(synergyRatings[stat] ?? 60, 0, 100);
+        const secondaryChance = clamp(
+          0.24 + secondaryBonus * 0.6 + legendaryLuck * 0.5 + (momentumBias - 1) * 0.45 + (synergyRating - 60) / 180,
           0,
-          100
+          0.95
         );
-        addTrainingLog(
-          `Secondary aptitude improved (${capitalize(secondaryTarget)} +${secondaryGain}).`,
-          "info"
-        );
-      }
-    }
-
-    state.avatar.sessions -= 1;
-    state.lastTrainedStat = stat;
-    addTrainingLog(`Focused on ${capitalize(stat)}: +${gain} points.`);
-
-    const moodShift = adjustMood(sameStat ? -7 : -5);
-    if (moodShift) {
-      addTrainingLog(
-        `Training impact on mood ${moodShift > 0 ? "+" : ""}${moodShift}.`,
-        moodShift > 0 ? "success" : "info"
-      );
-    }
-
-    updateAvatarProfile();
-
-    const afterProfile = state.avatar.profile || buildRacingProfile(state.avatar.stats);
-    if (beforeProfile && afterProfile) {
-      const passingDiff =
-        (afterProfile.aptitudes?.passing?.rating || 0) -
-        (beforeProfile.aptitudes?.passing?.rating || 0);
-      if (passingDiff >= 2) {
-        addTrainingLog(`Passing aptitude improved by ${passingDiff} points.`, "info");
-      }
-      const beforeDistance = beforeProfile.aptitudes?.distance?.type;
-      const afterDistance = afterProfile.aptitudes?.distance?.type;
-      if (afterDistance && afterDistance !== beforeDistance) {
-        addTrainingLog(`Distance aptitude now favors ${afterDistance} runs.`, "success");
-      }
-      const phaseBefore = beforeProfile.aptitudes?.phase?.focus;
-      const phaseAfter = afterProfile.aptitudes?.phase?.focus;
-      if (phaseAfter && phaseAfter !== phaseBefore) {
-        addTrainingLog(`Race phase focus shifted toward the ${phaseAfter}.`, "info");
-      }
-    }
-
-    tryUnlockSkill(stat, modifiers);
-    Storage.saveCurrentAvatar(state.avatar);
-    refreshUI();
-
-    if (state.avatar.sessions === 0) {
-      addTrainingLog("Training complete. Consider retiring to gain legacy bonuses.", "info");
-    }
-  }
-
-  function tryUnlockSkill(stat, modifiers = {}) {
-    if (state.avatar.skills.length >= 3) return;
-
-    const insight = state.avatar.stats.insight;
-    let chance = 0.1 + Math.max(0, insight - 40) * 0.005;
-    chance += state.avatar.modifiers?.skillChanceBonus || 0;
-    if (modifiers.legendaryLuck) {
-      chance += modifiers.legendaryLuck * 0.4;
-    }
-    chance = clamp(chance, 0, 0.95);
-
-    if (Math.random() < chance) {
-      const existingNames = state.avatar.skills.map((s) => s.name);
-      const rarityBias = clamp(
-        (modifiers.legendaryLuck || 0) * 1.1 + (modifiers.secondaryBonus || 0) * 0.4,
-        0,
-        0.8
-      );
-      const newSkill = pickRandomSkill(existingNames, rarityBias);
-      if (newSkill) {
-        state.avatar.skills.push(newSkill);
-        addTrainingLog(`Unlocked skill: ${newSkill.name}!`, "success");
-        const uplift = adjustMood(4);
-        if (uplift) {
+        if (Math.random() < secondaryChance) {
+          const secondaryGain = Math.max(
+            1,
+            Math.round(gain * (0.18 + secondaryBonus * 0.35) * (1 + (legendaryLuck + secondaryBonus) * 0.35))
+          );
+          state.avatar.stats[secondaryTarget] = clamp(
+            (state.avatar.stats[secondaryTarget] || 0) + secondaryGain,
+            0,
+            100
+          );
           addTrainingLog(
-            `Skill breakthrough boosted mood ${uplift > 0 ? "+" : ""}${uplift}.`,
-            "success"
+            `Linked stat synergy (${capitalize(secondaryTarget)} +${secondaryGain}).`,
+            "info"
           );
         }
       }
-    } else if (stat === "insight") {
-      addTrainingLog("Insight training sharpened instincts. Skill chance increased subtly.", "info");
+
+      state.avatar.sessions -= 1;
+      state.lastTrainedStat = stat;
+      addTrainingLog(`Focused on ${capitalize(stat)}: +${gain} points.`);
+
+      const moodShift = adjustMood(sameStat ? -7 : -5);
+      if (moodShift) {
+        addTrainingLog(
+          `Training impact on mood ${moodShift > 0 ? "+" : ""}${moodShift}.`,
+          moodShift > 0 ? "success" : "info"
+        );
+      }
+
+      updateAvatarProfile({ persist: false });
+
+      const afterProfile = state.avatar.profile || buildRacingProfile(state.avatar.stats, modifiers);
+      if (beforeProfile && afterProfile) {
+        const passingDiff =
+          (afterProfile.aptitudes?.passing?.rating || 0) - (beforeProfile.aptitudes?.passing?.rating || 0);
+        if (passingDiff >= 2) {
+          addTrainingLog(`Passing aptitude improved by ${passingDiff} points.`, "info");
+        }
+        const beforeDistance = beforeProfile.aptitudes?.distance?.type;
+        const afterDistance = afterProfile.aptitudes?.distance?.type;
+        if (afterDistance && afterDistance !== beforeDistance) {
+          addTrainingLog(`Distance aptitude now favors ${afterDistance} runs.`, "success");
+        }
+        const phaseBefore = beforeProfile.aptitudes?.phase?.focus;
+        const phaseAfter = afterProfile.aptitudes?.phase?.focus;
+        if (phaseAfter && phaseAfter !== phaseBefore) {
+          addTrainingLog(`Race phase focus shifted toward the ${phaseAfter}.`, "info");
+        }
+
+        if (beforeProfile.secondary && afterProfile.secondary) {
+          const secondaryHighlights = [];
+          const trackSecondary = [
+            ["Passing Power", "passingPower"],
+            ["Pace Control", "paceControl"],
+            ["Tactical Instinct", "tacticalInstinct"],
+            ["Fatigue Resistance", "fatigueResistance"]
+          ];
+          trackSecondary.forEach(([label, key]) => {
+            const diff = (afterProfile.secondary?.[key] || 0) - (beforeProfile.secondary?.[key] || 0);
+            if (diff >= 2) {
+              secondaryHighlights.push(`${label} +${diff}`);
+            }
+          });
+          const beforePref = beforeProfile.secondary?.positioning?.preferred;
+          const afterPref = afterProfile.secondary?.positioning?.preferred;
+          if (afterPref && afterPref !== beforePref) {
+            secondaryHighlights.push(`Positioning now favors the ${afterPref}`);
+          }
+          const phasePower = afterProfile.secondary?.phasePower || {};
+          const prevPhasePower = beforeProfile.secondary?.phasePower || {};
+          ["start", "middle", "final"].forEach((phase) => {
+            const diff = (phasePower[phase] || 0) - (prevPhasePower[phase] || 0);
+            if (diff >= 2) {
+              secondaryHighlights.push(`${capitalize(phase)} phase energy +${diff}`);
+            }
+          });
+          if (secondaryHighlights.length) {
+            addTrainingLog(`Secondary gains: ${secondaryHighlights.join(", ")}.`, "success");
+          }
+        }
+      }
+
+      tryUnlockSkill(stat, modifiers);
+      Storage.saveCurrentAvatar(state.avatar);
+      refreshUI();
+
+      if (state.avatar.sessions === 0) {
+        addTrainingLog("Training complete. Consider retiring to gain legacy bonuses.", "info");
+      }
     }
-  }
+
+    function tryUnlockSkill(stat, modifiers = {}) {
+      if (state.avatar.skills.length >= 3) return;
+
+      const insight = state.avatar.stats.insight;
+      const secondaryProfile =
+        state.avatar.profile?.secondary ||
+        deriveSecondaryStats(state.avatar.stats, state.avatar.modifiers || {}, state.avatar.aptitudes);
+      const skillProcRating = secondaryProfile?.skillProc ?? 55;
+      let chance = 0.14 + Math.max(0, insight - 40) * 0.0045;
+      chance += state.avatar.modifiers?.skillChanceBonus || 0;
+      chance += (modifiers.legendaryLuck || 0) * 0.5;
+      chance += (skillProcRating - 60) / 140;
+      if (stat === "insight") {
+        chance += 0.05;
+      }
+      chance = clamp(chance, state.avatar.legacy ? 0.28 : 0.18, 0.95);
+
+      if (Math.random() < chance) {
+        const existingNames = state.avatar.skills.map((s) => s.name);
+        const rarityBias = clamp(
+          (modifiers.legendaryLuck || 0) * 1.1 + (modifiers.secondaryBonus || 0) * 0.4 + (skillProcRating - 60) / 200,
+          0,
+          0.8
+        );
+        const newSkill = pickRandomSkill(existingNames, rarityBias);
+        if (newSkill) {
+          state.avatar.skills.push(newSkill);
+          addTrainingLog(`Unlocked skill: ${newSkill.name}!`, "success");
+          const uplift = adjustMood(4);
+          if (uplift) {
+            addTrainingLog(
+              `Skill breakthrough boosted mood ${uplift > 0 ? "+" : ""}${uplift}.`,
+              "success"
+            );
+          }
+        }
+      } else if (stat === "insight") {
+        addTrainingLog("Insight training sharpened instincts. Skill chance increased subtly.", "info");
+      } else if (chance > 0.35) {
+        addTrainingLog("Close call on unlocking a skill—keep pushing those core stats!", "info");
+      }
+    }
 
   function handleRetire() {
     const confirmRetire = window.confirm(
@@ -694,20 +765,22 @@
     return buildRacingProfile(stats).performance;
   }
 
-  function updateAvatarProfile({ persist = false } = {}) {
-    if (!state.avatar || !state.avatar.stats) return;
-    const profile = buildRacingProfile(state.avatar.stats);
-    state.avatar.profile = {
-      performance: { ...profile.performance },
-      aptitudes: deepClone(profile.aptitudes)
-    };
-    state.avatar.performance = { ...profile.performance };
-    state.avatar.aptitudes = deepClone(profile.aptitudes);
-    state.avatar.maneuverRating = profile.performance.maneuver;
-    if (persist) {
-      Storage.saveCurrentAvatar(state.avatar);
+    function updateAvatarProfile({ persist = false } = {}) {
+      if (!state.avatar || !state.avatar.stats) return;
+      const profile = buildRacingProfile(state.avatar.stats, state.avatar.modifiers || {});
+      state.avatar.profile = {
+        performance: { ...profile.performance },
+        aptitudes: deepClone(profile.aptitudes),
+        secondary: deepClone(profile.secondary)
+      };
+      state.avatar.performance = { ...profile.performance };
+      state.avatar.aptitudes = deepClone(profile.aptitudes);
+      state.avatar.secondary = deepClone(profile.secondary);
+      state.avatar.maneuverRating = profile.performance.maneuver;
+      if (persist) {
+        Storage.saveCurrentAvatar(state.avatar);
+      }
     }
-  }
 
   function applyStyleAdjustments(performance, style) {
     const adjusted = {
@@ -842,12 +915,15 @@
       }
       const rank = getRank(racer, leaderboard);
       let desired = racer.targetZone ?? racer.zoneIndex ?? midIndex;
+        const aggression = racer.aggressionRating ?? racer.secondary?.aggression ?? 60;
+        const tactical = racer.secondary?.tacticalInstinct ?? racer.skillProcRating ?? 60;
+        const preferredLane = racer.preferredLane || racer.secondary?.positioning?.preferred || null;
 
       if (phase === "start") {
         const accelScore = racer.stats.stride + racer.stats.force;
-        if (accelScore > 135 || (racer.startAggro || 0) > 0.55) {
+          if (accelScore > 135 || (racer.startAggro || 0) > 0.55 || aggression > 72) {
           desired = insideIndex;
-        } else if (accelScore < 105) {
+          } else if (accelScore < 105 && aggression < 55) {
           desired = midIndex;
         } else {
           desired = sampleRng(race) > 0.5 ? insideIndex : midIndex;
@@ -855,15 +931,15 @@
         scheduleStrategy(racer, race, 0.2, 0.5);
       } else if (phase === "middle") {
         if (blocked) {
-          if (racer.stats.insight > 60 && racer.performance.maneuver > 55) {
+            if (racer.stats.insight > 60 && racer.performance.maneuver > 55) {
             desired = Math.min(outsideIndex, (racer.zoneIndex ?? midIndex) + 1);
-          } else if (racer.stats.resolve > 65) {
+            } else if (racer.stats.resolve > 65 || tactical > 70) {
             desired = racer.zoneIndex ?? midIndex;
           } else {
             desired = Math.max(midIndex, Math.min(outsideIndex, racer.zoneIndex ?? midIndex));
           }
         } else {
-          if ((racer.zoneIndex ?? midIndex) !== insideIndex && energyPct > 50) {
+            if ((racer.zoneIndex ?? midIndex) !== insideIndex && energyPct > 50 && aggression > 58) {
             desired = insideIndex;
           } else if (energyPct < 35) {
             desired = midIndex;
@@ -872,7 +948,7 @@
         scheduleStrategy(racer, race, 0.8, 1.4);
       } else {
         desired = outsideIndex;
-        if (rank === 1 && !blocked && energyPct > 35) {
+          if (rank === 1 && !blocked && energyPct > 35) {
           desired = insideIndex;
         }
         if (energyPct < 25) {
@@ -900,6 +976,16 @@
           desired = biasIndex;
         }
       }
+
+        if (!blocked && preferredLane) {
+          const prefIndex = zoneLabelToIndex(preferredLane);
+          if (prefIndex !== null) {
+            const steerChance = clamp((tactical - 50) / 120, 0, 0.65);
+            if (sampleRng(race) < steerChance) {
+              desired = prefIndex;
+            }
+          }
+        }
 
       desired = Math.max(0, Math.min(outsideIndex, desired));
       if (desired !== racer.targetZone) {
@@ -931,12 +1017,19 @@
 
   function attemptPass(behind, ahead, race) {
     const racerStyle = behind.style || "Pacer";
-    let passChance = clamp(behind.performance.maneuver / 100 + (behind.passBonus || 0), 0.05, 0.99);
+      const behindManeuver = behind.secondary?.maneuverBase ?? behind.performance.maneuver;
+      const aheadManeuver = ahead.secondary?.maneuverBase ?? ahead.performance.maneuver;
+      const passingPower = behind.secondary?.passingPower ?? behind.performance.maneuver;
+      let passChance = clamp(
+        behindManeuver / 100 + (behind.passBonus || 0) + (passingPower - 60) / 180,
+        0.05,
+        0.99
+      );
     if (behind.predictive) {
       passChance = Math.min(0.99, passChance + 0.05);
     }
 
-    const maneuverAdvantage = behind.performance.maneuver >= ahead.performance.maneuver + 2;
+      const maneuverAdvantage = behindManeuver >= aheadManeuver + 2;
     const speedAdvantage = behind.performance.speed >= ahead.performance.speed + 2;
     const progress = (behind.distance % TRACK_LENGTH) / TRACK_LENGTH;
     if (progress >= FINAL_PHASE_START) {
@@ -947,6 +1040,14 @@
     if (insightBoost) {
       passChance = clamp(passChance + insightBoost, 0.05, 0.99);
     }
+
+      if (behind.aggressionRating) {
+        passChance = clamp(passChance + (behind.aggressionRating - 60) / 300, 0.05, 0.99);
+      }
+
+      if (ahead.secondary?.fatigueResistance) {
+        passChance = clamp(passChance - (ahead.secondary.fatigueResistance - 65) / 320, 0.05, 0.99);
+      }
 
     const roll = sampleRng(race);
     let success = maneuverAdvantage || speedAdvantage || roll < passChance;
@@ -980,7 +1081,7 @@
       }
     }
 
-    if (success) {
+      if (success) {
       const offsets = [];
       if (behind.lane < LANE_COUNT - 1) offsets.push(behind.lane + 1);
       if (behind.lane > 0) offsets.push(behind.lane - 1);
@@ -1011,7 +1112,7 @@
       behind.zoneBlend = 0;
       behind.lane = chosenLane;
       behind.distance += 1;
-      behind.passCooldown = cooldown;
+        behind.passCooldown = cooldown;
       spendStamina(behind, randomBetween(race, PASS_COST_SUCCESS.min, PASS_COST_SUCCESS.max), "pass_success", race);
       spendStamina(ahead, BLOCK_DEFENSE_COST, "passed", race);
       scheduleStrategy(ahead, race, PASS_COOLDOWN_MIN * 0.5, PASS_COOLDOWN_MIN);
@@ -1077,7 +1178,8 @@
       createAIRacer(index, state.avatar.stats, seedRng)
     ).map((blueprint) => deepClone(blueprint));
 
-    const playerProfile = state.avatar.profile || buildRacingProfile(state.avatar.stats);
+      const playerProfile =
+        state.avatar.profile || buildRacingProfile(state.avatar.stats, state.avatar.modifiers || {});
 
     return {
       seed,
@@ -1091,7 +1193,8 @@
         style: state.avatar.style,
         performance: deepClone(playerProfile.performance),
         aptitudes: deepClone(playerProfile.aptitudes),
-        profile: deepClone(playerProfile)
+          profile: deepClone(playerProfile),
+          secondary: deepClone(playerProfile.secondary)
       }
     };
   }
@@ -1166,29 +1269,39 @@
     };
   }
 
-  function buildRacer({
-    id,
-    name,
-    color,
-    stats,
-    skills,
-    modifiers,
-    isPlayer,
-    style,
-    styleName,
-    mood,
-    performance,
-    profile,
-    aptitudes
-  }) {
+    function buildRacer({
+      id,
+      name,
+      color,
+      stats,
+      skills,
+      modifiers,
+      isPlayer,
+      style,
+      styleName,
+      mood,
+      performance,
+      profile,
+      aptitudes
+    }) {
     const maxEnergy = 100 + stats.endurance * 10;
     const useStyle = style || "Pacer";
     const styleLabel = styleName || useStyle;
-    const baseProfile = profile ? deepClone(profile) : buildRacingProfile(stats);
-    const perfSource = performance ? { ...performance } : { ...baseProfile.performance };
+      const effectiveModifiers = modifiers
+        ? { ...modifiers }
+        : {
+            trainingBonus: 0,
+            skillChanceBonus: 0,
+            legendaryLuck: 0,
+            secondaryBonus: 0
+          };
+      const baseProfile = profile ? deepClone(profile) : buildRacingProfile(stats, effectiveModifiers);
+      const perfSource = performance ? { ...performance } : { ...baseProfile.performance };
     const baseAptitudes = aptitudes
       ? deepClone(aptitudes)
-      : baseProfile.aptitudes || deriveAptitudes(stats, perfSource);
+        : baseProfile.aptitudes || deriveAptitudes(stats, perfSource);
+      const secondaryProfile =
+        baseProfile.secondary || deriveSecondaryStats(stats, effectiveModifiers, baseAptitudes);
     const maneuverAdjusted = applyStyleAdjustments(perfSource, useStyle);
     const baseSpeed = Math.max(4, 3.2 + maneuverAdjusted.speed * 0.05);
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
@@ -1207,7 +1320,7 @@
         timer: 0,
         used: false
       })),
-      modifiers: modifiers || { trainingBonus: 0, skillChanceBonus: 0 },
+        modifiers: effectiveModifiers,
       style: useStyle,
       styleName: styleLabel,
       isPlayer,
@@ -1258,10 +1371,17 @@
       insightBonusBase: 0,
       insightBonusActive: 0,
       zoneDecisionFactorBase: 1,
-      zoneDecisionFactorActive: 1
+        zoneDecisionFactorActive: 1,
+        secondary: deepClone(secondaryProfile),
+        skillProcRating: secondaryProfile?.skillProc ?? 55,
+        upgradeMomentum: secondaryProfile?.upgradeMomentum ?? 1,
+        aggressionRating: secondaryProfile?.aggression ?? 60,
+        phasePowerProfile: deepClone(secondaryProfile?.phasePower || {}),
+        preferredLane: secondaryProfile?.positioning?.preferred || null
     };
     applyPassiveSkills(racerObj);
     applyAptitudeModifiers(racerObj);
+      applySecondarySynergy(racerObj);
     initializeZoneState(racerObj, DEFAULT_ZONE_INDEX);
     return racerObj;
   }
@@ -1431,6 +1551,47 @@
     racer.focusDrainFactorBase = clamp(racer.focusDrainFactorBase, 0.4, 1.2);
     racer.focusDrainFactorActive = clamp(racer.focusDrainFactorActive, 0.4, 1.2);
   }
+
+    function applySecondarySynergy(racer) {
+      const secondary = racer.secondary || {};
+      if (!secondary || Object.keys(secondary).length === 0) {
+        return;
+      }
+
+      const passingDelta = clamp((secondary.passingPower - 60) / 180, -0.04, 0.22);
+      racer.passBonus += passingDelta;
+
+      const tacticalDelta = clamp((secondary.tacticalInstinct - 60) / 240, -0.02, 0.12);
+      racer.insightBonusBase += tacticalDelta;
+      racer.insightBonusActive = racer.insightBonusBase;
+
+      const paceFactor = clamp(1 - (secondary.paceControl - 60) / 260, 0.75, 1.15);
+      racer.energyDrainFactor *= paceFactor;
+
+      const fatigueShield = clamp(1 - (secondary.fatigueResistance - 60) / 220, 0.55, 1.05);
+      racer.staminaShieldBase = Math.min(racer.staminaShieldBase, fatigueShield);
+      racer.staminaShieldActive = racer.staminaShieldBase;
+
+      const decisionFactor = clamp(1 - (secondary.tacticalInstinct - 60) / 320, 0.7, 1.2);
+      racer.zoneDecisionFactorBase *= decisionFactor;
+      racer.zoneDecisionFactorActive = racer.zoneDecisionFactorBase;
+
+      if (!racer.zoneBiasPassive && secondary.positioning?.preferred) {
+        racer.zoneBiasPassive = secondary.positioning.preferred;
+      }
+
+      racer.aggressionRating = secondary.aggression ?? racer.aggressionRating;
+      racer.skillProcRating = secondary.skillProc ?? racer.skillProcRating;
+      racer.phasePowerProfile = deepClone(secondary.phasePower || racer.phasePowerProfile || {});
+      racer.preferredLane = racer.preferredLane || secondary.positioning?.preferred || null;
+
+      racer.passBonus = clamp(racer.passBonus, -0.05, 0.5);
+      racer.energyDrainFactor = clamp(racer.energyDrainFactor, 0.4, 1.25);
+      racer.zoneDecisionFactorBase = clamp(racer.zoneDecisionFactorBase, 0.6, 1.3);
+      racer.zoneDecisionFactorActive = racer.zoneDecisionFactorBase;
+      racer.insightBonusBase = clamp(racer.insightBonusBase, 0, 0.25);
+      racer.insightBonusActive = racer.insightBonusBase;
+    }
 
   function spendStamina(racer, amount, reason, race) {
     if (!racer || !amount) return;
@@ -1609,7 +1770,9 @@
     const baseSpeed = racer.baseSpeed;
     const styleMultiplier = getStylePhaseMultiplier(racer.style, phase);
     const staminaRatio = Math.max(0, Math.min(1, racer.energy / racer.maxEnergy));
-    const energyFactor = Math.max(0.4, staminaRatio);
+      const paceControl = racer.secondary?.paceControl ?? 60;
+      const paceEfficiency = clamp(1 + (paceControl - 60) / 220 * (1 - staminaRatio), 0.85, 1.25);
+      const energyFactor = Math.max(0.4, staminaRatio) * paceEfficiency;
     const skillMultiplier = resolveSkillMultiplier(racer, dt);
     const resolveBoost = phase === "final" && racer.stats.resolve > 40 ? 1 + (racer.stats.resolve - 40) * 0.005 : 1;
     const moodPercent = clamp(Math.round(racer.mood ?? 70), 0, 120);
@@ -1617,6 +1780,8 @@
     const jitterRange = (sampleRng(race) - 0.5) * 0.06 * (racer.jitterFactor || 1);
     const rngJitter = 1 + jitterRange + racer.rngModifier;
     const slipstreamMultiplier = computeSlipstreamMultiplier(racer, race);
+      const phaseRating = racer.phasePowerProfile?.[phase];
+      const phaseSynergy = phaseRating ? clamp(1 + (phaseRating - 60) / 260, 0.85, 1.3) : 1;
 
     let finalBurstMultiplier = 1;
     if (phase === "final") {
@@ -1639,7 +1804,8 @@
       resolveBoost *
       moodMultiplier *
       slipstreamMultiplier *
-      finalBurstMultiplier *
+        finalBurstMultiplier *
+        phaseSynergy *
       rngJitter;
 
     if (racer.energy <= 0) {
@@ -1664,7 +1830,9 @@
     if (racer.energy < racer.fatigueThreshold) {
       const fatigueRatio = Math.max(0, Math.min(1, racer.energy / racer.fatigueThreshold));
       let fatiguePenalty = lerp(0.72, 1, fatigueRatio);
-      fatiguePenalty += Math.max(0, (racer.stats.resolve - 60) / 320);
+        fatiguePenalty += Math.max(0, (racer.stats.resolve - 60) / 320);
+        const fatigueResist = racer.secondary?.fatigueResistance ?? 60;
+        fatiguePenalty *= clamp(1 / (1 + (fatigueResist - 60) / 220), 0.82, 1.05);
       fatiguePenalty = Math.min(fatiguePenalty, 1);
       updatedSpeed *= fatiguePenalty;
     }
@@ -1675,7 +1843,15 @@
     const intensity = Math.max(0.4, Math.min(1.3, updatedSpeed / Math.max(1, racer.baseSpeed)));
     const shieldFactor = racer.staminaShieldActive ?? racer.staminaShieldBase ?? 1;
     const focusDrainFactor = racer.focusDrainFactorActive ?? racer.focusDrainFactorBase ?? 1;
-    const maintainCost = racer.baseDrain * intensity * (racer.energyDrainFactor || 1) * focusDrainFactor * shieldFactor * dt;
+      const paceDrainFactor = clamp(1 - (paceControl - 60) / 260, 0.72, 1.1);
+      const maintainCost =
+        racer.baseDrain *
+        intensity *
+        (racer.energyDrainFactor || 1) *
+        focusDrainFactor *
+        shieldFactor *
+        paceDrainFactor *
+        dt;
     spendStamina(racer, maintainCost, "maintain", race);
 
     const timeSincePass = race.time - (racer.lastPassAttempt || 0);
@@ -1703,8 +1879,12 @@
       if (!skill.trigger) return;
       if (skill.used || skill.active || skill.trigger !== phase) return;
 
-      let chance = 0.3 + racer.stats.insight * 0.002;
+        const procRating = racer.skillProcRating ?? racer.secondary?.skillProc ?? racer.profile?.secondary?.skillProc ?? 55;
+        const legendaryLuck = racer.modifiers?.legendaryLuck || 0;
+        let chance = 0.28 + racer.stats.insight * 0.002;
       chance += racer.modifiers?.skillChanceBonus || 0;
+        chance += legendaryLuck * 0.45;
+        chance += (procRating - 60) / 140;
       const moodPercent = clamp(Math.round(racer.mood ?? 70), 0, 100);
       chance += (moodPercent - 50) * 0.002;
 
@@ -1718,9 +1898,11 @@
         }
         const baseline = 0.45 + (racer.insightBonusActive || 0);
         chance = Math.max(chance, baseline);
-      }
+        } else {
+          chance = Math.max(chance, 0.35);
+        }
 
-      chance = clamp(chance, 0, 0.95);
+        chance = clamp(chance, racer.isPlayer ? 0.35 : 0.55, 0.96);
 
       if (sampleRng(race) < chance) {
         skill.active = true;
