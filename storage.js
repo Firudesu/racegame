@@ -1,11 +1,13 @@
 // Project Stride storage helpers
 
 (() => {
-  const STORAGE_KEYS = {
-    current: "projectStride-current-avatar",
-    token: "projectStride-token-id",
-    legacy: "projectStride-legacy-records"
-  };
+    const STORAGE_KEYS = {
+      current: "projectStride-current-avatar",
+      token: "projectStride-token-id",
+      legacy: "projectStride-legacy-records",
+      stable: "projectStride-stable-roster",
+      active: "projectStride-active-horse"
+    };
 
   function safeParse(raw, fallback = null) {
     try {
@@ -104,10 +106,34 @@
     return trimmed;
   }
 
+  function loadStable() {
+    const roster = safeParse(localStorage.getItem(STORAGE_KEYS.stable), []);
+    return Array.isArray(roster) ? roster : [];
+  }
+
+  function saveStable(roster) {
+    const payload = Array.isArray(roster) ? roster : [];
+    localStorage.setItem(STORAGE_KEYS.stable, JSON.stringify(payload));
+  }
+
+  function loadActiveHorseId() {
+    return localStorage.getItem(STORAGE_KEYS.active);
+  }
+
+  function saveActiveHorseId(id) {
+    if (id == null) {
+      localStorage.removeItem(STORAGE_KEYS.active);
+      return;
+    }
+    localStorage.setItem(STORAGE_KEYS.active, id);
+  }
+
   function resetAll() {
     localStorage.removeItem(STORAGE_KEYS.current);
     localStorage.removeItem(STORAGE_KEYS.token);
     localStorage.removeItem(STORAGE_KEYS.legacy);
+    localStorage.removeItem(STORAGE_KEYS.stable);
+    localStorage.removeItem(STORAGE_KEYS.active);
   }
 
   window.ProjectStrideStorage = {
@@ -118,6 +144,10 @@
     saveTokenId,
     loadLegacyRecords,
     addLegacyRecord,
+    loadStable,
+    saveStable,
+    loadActiveHorseId,
+    saveActiveHorseId,
     resetAll
   };
 })();

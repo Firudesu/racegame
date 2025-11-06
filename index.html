@@ -83,68 +83,112 @@
         </section>
       </aside>
 
-      <section class="content">
-        <div class="menu" id="menu-screen">
-          <h2>Main Menu</h2>
-          <p>Select an action for your avatar.</p>
-          <div class="menu-buttons">
-            <button data-action="train" class="primary">Train</button>
-            <button data-action="race" class="primary">Race</button>
-            <button data-action="retire">Retire</button>
-            <button data-action="reset" class="danger">Reset</button>
-          </div>
-        </div>
+        <section class="content">
+          <div id="ui-flash" class="flash-banner" hidden></div>
 
-        <div class="training" id="training-screen" hidden>
-          <h2>Training Session</h2>
-          <p>Select a stat to focus on this session.</p>
-          <div class="training-buttons">
-            <button data-train="stride">Stride</button>
-            <button data-train="endurance">Endurance</button>
-            <button data-train="force">Force</button>
-            <button data-train="resolve">Resolve</button>
-            <button data-train="insight">Insight</button>
-          </div>
-          <div class="training-log" id="training-log"></div>
-          <button id="back-to-menu" class="secondary">Back to Menu</button>
-        </div>
-
-        <div class="race" id="race-screen" hidden>
-          <div class="race-header">
-            <h2>Stride Derby</h2>
-            <div class="hud">
-              <div>Phase: <span id="hud-phase">--</span></div>
-              <div>Timer: <span id="hud-timer">0.0</span>s</div>
-              <div>Rank: <span id="hud-rank">--</span></div>
-              <div class="energy-bar">
-                <span>Stamina</span>
-                <div class="bar">
-                  <div class="fill" id="hud-energy"></div>
-                </div>
-              </div>
-              <div class="hud-skills" id="hud-skills"></div>
+          <div class="screen map-screen" data-screen="map">
+            <h2 id="map-title">Map Menu</h2>
+            <p class="screen-lead">Choose a location to manage your stable.</p>
+            <div class="map-grid">
+              <button class="location-card" data-screen-target="training">
+                <span class="location-title">Training Grounds</span>
+                <span class="location-subtitle">Improve stats & routine</span>
+              </button>
+              <button class="location-card" data-screen-target="paddock">
+                <span class="location-title">Paddock</span>
+                <span class="location-subtitle">Organise active horses</span>
+              </button>
+              <button class="location-card" data-screen-target="race">
+                <span class="location-title">Race</span>
+                <span class="location-subtitle">Prep mock race entries</span>
+              </button>
+              <button class="location-card" data-screen-target="retired">
+                <span class="location-title">Retired</span>
+                <span class="location-subtitle">Review legacy avatars</span>
+              </button>
             </div>
           </div>
-          <canvas id="race-canvas" width="900" height="500"></canvas>
-          <div class="race-controls">
-            <button id="start-race" class="primary">Start Race</button>
-            <button id="race-back" class="secondary">Back to Menu</button>
-          </div>
-        </div>
-      </section>
-    </main>
-  </div>
 
-  <div class="modal" id="results-modal" hidden>
-    <div class="modal-content">
-      <h2>Race Results</h2>
-      <div id="results-body"></div>
-      <div class="modal-actions">
-        <button id="results-back" class="primary">Back to Menu</button>
-        <button id="results-replay" class="secondary">Replay Race</button>
+          <div class="screen training-screen" data-screen="training" hidden>
+            <header class="screen-header">
+              <div>
+                <h2>Training Grounds</h2>
+                <p>Schedule focused drills for the selected horse.</p>
+              </div>
+              <button class="return-button" data-return>Return to Map</button>
+            </header>
+            <div class="training-layout">
+              <div class="training-options" id="training-options"></div>
+              <div class="training-details">
+                <div class="training-summary" id="training-summary">
+                  Select a focus to see the session details.
+                </div>
+                <div class="training-meta">
+                  <div><strong>Time:</strong> <span id="training-duration">--</span></div>
+                  <div><strong>Success Chance:</strong> <span id="training-chance">--</span></div>
+                </div>
+                <div class="training-actions">
+                  <button id="start-training" class="primary">Start Training</button>
+                  <div class="training-timer" id="training-timer" hidden>
+                    <span id="training-status">Preparing session…</span>
+                    <span id="training-countdown"></span>
+                  </div>
+                </div>
+                <div class="training-log" id="training-log"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="screen paddock-screen" data-screen="paddock" hidden>
+            <header class="screen-header">
+              <div>
+                <h2>Paddock</h2>
+                <p>Manage up to four active horses.</p>
+              </div>
+              <button class="return-button" data-return>Return to Map</button>
+            </header>
+            <div class="paddock-grid" id="paddock-grid"></div>
+          </div>
+
+          <div class="screen race-screen" data-screen="race" hidden>
+            <header class="screen-header">
+              <div>
+                <h2>Race Prep</h2>
+                <p>Select a horse to run a mock sequence.</p>
+              </div>
+              <button class="return-button" data-return>Return to Map</button>
+            </header>
+            <div class="race-status" id="race-status">No race selected.</div>
+            <div class="race-roster" id="race-roster"></div>
+          </div>
+
+          <div class="screen retired-screen" data-screen="retired" hidden>
+            <header class="screen-header">
+              <div>
+                <h2>Retired Gallery</h2>
+                <p>Legacy champions available for future inheritance.</p>
+              </div>
+              <button class="return-button" data-return>Return to Map</button>
+            </header>
+            <div class="retired-list" id="retired-list"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="context-menu" id="paddock-context" hidden></div>
+
+    <div class="ui-modal" id="ui-modal" hidden>
+      <div class="ui-modal__backdrop" data-close></div>
+      <div class="ui-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <header class="ui-modal__header">
+          <h3 id="modal-title"></h3>
+          <button class="ui-modal__close" data-close aria-label="Close">×</button>
+        </header>
+        <div class="ui-modal__body" id="modal-body"></div>
+        <footer class="ui-modal__footer" id="modal-footer"></footer>
       </div>
     </div>
-  </div>
 
   <script src="data.js"></script>
   <script src="storage.js"></script>
