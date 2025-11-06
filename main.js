@@ -17,40 +17,51 @@
     deriveAptitudes
   } = Data;
 
-  const elements = {
-    tokenId: document.getElementById("token-id"),
-    avatarName: document.getElementById("avatar-name"),
-    sessions: document.getElementById("avatar-sessions"),
-    avatarStyle: document.getElementById("avatar-style"),
-    legacyFlag: document.getElementById("legacy-flag"),
-    skillList: document.getElementById("skill-list"),
-    legacyList: document.getElementById("legacy-list"),
-    legacyEmpty: document.getElementById("legacy-empty"),
-    trainingLog: document.getElementById("training-log"),
-    hudPhase: document.getElementById("hud-phase"),
-    hudTimer: document.getElementById("hud-timer"),
-    hudRank: document.getElementById("hud-rank"),
-    hudEnergy: document.getElementById("hud-energy"),
-    hudSkills: document.getElementById("hud-skills"),
-    menuScreen: document.getElementById("menu-screen"),
-    trainingScreen: document.getElementById("training-screen"),
-    raceScreen: document.getElementById("race-screen"),
-    backToMenu: document.getElementById("back-to-menu"),
-    raceBack: document.getElementById("race-back"),
-    startRace: document.getElementById("start-race"),
-    resultsModal: document.getElementById("results-modal"),
-    resultsBody: document.getElementById("results-body"),
-    resultsBack: document.getElementById("results-back"),
-    resultsReplay: document.getElementById("results-replay"),
-    menuButtons: document.querySelectorAll(".menu-buttons button"),
-    trainingButtons: document.querySelectorAll(".training-buttons button"),
-    raceCanvas: document.getElementById("race-canvas"),
-    menuRoot: document.getElementById("menu-screen"),
-    retireButton: document.querySelector('button[data-action="retire"]'),
-    trainButton: document.querySelector('button[data-action="train"]'),
-    raceButton: document.querySelector('button[data-action="race"]'),
-    resetButton: document.querySelector('button[data-action="reset"]')
-  };
+    const elements = {
+      tokenId: document.getElementById("token-id"),
+      avatarName: document.getElementById("avatar-name"),
+      sessions: document.getElementById("avatar-sessions"),
+      avatarStyle: document.getElementById("avatar-style"),
+      legacyFlag: document.getElementById("legacy-flag"),
+      skillList: document.getElementById("skill-list"),
+      legacyList: document.getElementById("legacy-list"),
+      legacyEmpty: document.getElementById("legacy-empty"),
+      trainingLog: document.getElementById("training-log"),
+      hudPhase: document.getElementById("hud-phase"),
+      hudTimer: document.getElementById("hud-timer"),
+      hudRank: document.getElementById("hud-rank"),
+      hudEnergy: document.getElementById("hud-energy"),
+      hudSkills: document.getElementById("hud-skills"),
+      mapScreen: document.getElementById("map-screen"),
+      trainingScreen: document.getElementById("training-screen"),
+      paddockScreen: document.getElementById("paddock-screen"),
+      raceScreen: document.getElementById("race-screen"),
+      retiredScreen: document.getElementById("retired-screen"),
+      trainingOptions: document.getElementById("training-options"),
+      trainingMeta: document.getElementById("training-meta"),
+      startTraining: document.getElementById("start-training"),
+      trainingTimer: document.getElementById("training-timer"),
+      paddockGrid: document.getElementById("paddock-grid"),
+      paddockDetail: document.getElementById("paddock-detail"),
+      paddockContextMenu: document.getElementById("paddock-context-menu"),
+      raceRoster: document.getElementById("race-roster"),
+      raceStatus: document.getElementById("race-status"),
+      racePlaceholder: document.getElementById("race-placeholder"),
+      raceStartPrototype: document.getElementById("race-start-prototype"),
+      raceSimWrapper: document.getElementById("race-sim-wrapper"),
+      retiredList: document.getElementById("retired-list"),
+      startRace: document.getElementById("start-race"),
+      raceBack: document.getElementById("race-back"),
+      resultsModal: document.getElementById("results-modal"),
+      resultsBody: document.getElementById("results-body"),
+      resultsBack: document.getElementById("results-back"),
+      resultsReplay: document.getElementById("results-replay"),
+      raceCanvas: document.getElementById("race-canvas"),
+      mapNodes: Array.from(document.querySelectorAll(".map-node")),
+      mapRetireButton: document.querySelector('#map-screen button[data-action="retire"]'),
+      mapResetButton: document.querySelector('#map-screen button[data-action="reset"]'),
+      returnButtons: document.querySelectorAll('[data-return]')
+    };
 
   const statBars = {
     stride: {
@@ -79,22 +90,96 @@
     }
   };
 
-  const canvas = elements.raceCanvas;
-  const ctx = canvas.getContext("2d");
+    const canvas = elements.raceCanvas;
+    const ctx = canvas.getContext("2d");
+    const mapNodeLookup = elements.mapNodes.reduce((acc, node) => {
+      const key = node?.dataset?.screenTarget;
+      if (key) acc[key] = node;
+      return acc;
+    }, {});
+
+    const TRAINING_OPTIONS = [
+      {
+        key: "stride",
+        label: "Stride",
+        duration: 3.2,
+        chance: 0.68,
+        summary: "Improves launch speed and rhythm."
+      },
+      {
+        key: "endurance",
+        label: "Endurance",
+        duration: 4.5,
+        chance: 0.62,
+        summary: "Extends stamina for longer runs."
+      },
+      {
+        key: "force",
+        label: "Force",
+        duration: 3.8,
+        chance: 0.58,
+        summary: "Builds raw power for duels and passes."
+      },
+      {
+        key: "resolve",
+        label: "Resolve",
+        duration: 4.1,
+        chance: 0.55,
+        summary: "Bolsters focus for late surges."
+      },
+      {
+        key: "insight",
+        label: "Insight",
+        duration: 3.6,
+        chance: 0.47,
+        summary: "Sharpens awareness and skill discovery chances."
+      }
+    ];
+
+    const TRAINING_OPTION_MAP = TRAINING_OPTIONS.reduce((acc, option) => {
+      acc[option.key] = option;
+      return acc;
+    }, {});
+
+    const screenMap = {
+      map: elements.mapScreen,
+      training: elements.trainingScreen,
+      paddock: elements.paddockScreen,
+      race: elements.raceScreen,
+      retired: elements.retiredScreen
+    };
   let deviceRatio = window.devicePixelRatio || 1;
   let eventsBound = false;
   resizeCanvas();
 
-  const state = {
-    avatar: null,
-    tokenId: null,
-    legacyRecords: [],
-    trainingLog: [],
-    lastTrainedStat: null,
-    currentScreen: "menu",
-    race: null,
-    lastRaceConfig: null
-  };
+    const state = {
+      avatar: null,
+      tokenId: null,
+      legacyRecords: [],
+      trainingLog: [],
+      lastTrainedStat: null,
+      currentScreen: "map",
+      race: null,
+      lastRaceConfig: null,
+      paddockSlots: [],
+      mainHorseId: null,
+      trainingState: {
+        selectedKey: null,
+        running: false,
+        intervalId: null,
+        finishTime: 0
+      },
+      paddockContext: {
+        selectedIndex: null
+      },
+      raceUi: {
+        selectedHorseId: null,
+        mockTimeoutId: null
+      },
+      retiredUi: {
+        openAttachId: null
+      }
+    };
 
   const Sfx = createSfx();
 
@@ -152,15 +237,22 @@
     }
 
     ensureAvatarSchema();
+      ensureHorseId(state.avatar);
 
     if (!state.tokenId) {
       state.tokenId = generateTokenId();
       Storage.saveTokenId(state.tokenId);
     }
 
+      state.avatar.tokenId = state.tokenId;
+
+      state.paddockSlots = loadPaddockFromStorage();
+      ensureAvatarInPaddock();
+
     bindEvents();
     refreshUI();
-    showScreen("menu");
+      renderTrainingOptions();
+      showScreen("map");
     drawRaceIdle();
   }
 
@@ -168,48 +260,94 @@
     if (eventsBound) return;
     eventsBound = true;
 
-    elements.menuButtons.forEach((button) => {
-      button.addEventListener("click", onMenuAction);
-    });
-
-    elements.trainingButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        const stat = button.dataset.train;
-        handleTrain(stat);
+      elements.mapNodes.forEach((node) => {
+        node.addEventListener("click", onMapNodeClick);
       });
-    });
 
-    elements.backToMenu.addEventListener("click", () => {
-      showScreen("menu");
-    });
-
-    elements.raceBack.addEventListener("click", () => {
-      stopRace();
-      showScreen("menu");
-    });
-
-    elements.startRace.addEventListener("click", () => {
-      startRace(false);
-    });
-
-    elements.resultsBack.addEventListener("click", () => {
-      hideResults();
-      showScreen("menu");
-    });
-
-    elements.resultsReplay.addEventListener("click", () => {
-      hideResults();
-      if (state.lastRaceConfig) {
-        showScreen("race");
-        startRace(true);
+      if (elements.mapRetireButton) {
+        elements.mapRetireButton.addEventListener("click", onRetireClick);
       }
-    });
 
-    window.addEventListener("resize", resizeCanvas);
+      if (elements.mapResetButton) {
+        elements.mapResetButton.addEventListener("click", () => {
+          handleReset();
+        });
+      }
 
-    if (elements.legacyList) {
-      elements.legacyList.addEventListener("click", onLegacyAction);
-    }
+      elements.returnButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          showScreen("map");
+        });
+      });
+
+      if (elements.trainingOptions) {
+        elements.trainingOptions.addEventListener("click", onTrainingOptionClick);
+      }
+
+      if (elements.startTraining) {
+        elements.startTraining.addEventListener("click", beginTrainingSession);
+      }
+
+      if (elements.paddockGrid) {
+        elements.paddockGrid.addEventListener("click", onPaddockGridClick);
+        elements.paddockGrid.addEventListener("contextmenu", onPaddockContextMenu);
+      }
+
+      if (elements.paddockContextMenu) {
+        elements.paddockContextMenu.addEventListener("click", onPaddockContextMenuAction);
+      }
+
+      if (elements.paddockDetail) {
+        elements.paddockDetail.addEventListener("click", onPaddockDetailAction);
+      }
+
+      document.addEventListener("click", onGlobalPointerDown);
+      document.addEventListener("keydown", onGlobalKeyDown);
+
+      if (elements.raceRoster) {
+        elements.raceRoster.addEventListener("click", onRaceRosterAction);
+      }
+
+      if (elements.raceStartPrototype) {
+        elements.raceStartPrototype.addEventListener("click", openPrototypeSimulation);
+      }
+
+      if (elements.raceBack) {
+        elements.raceBack.addEventListener("click", () => {
+          stopRace();
+          toggleRaceSimulation(false);
+        });
+      }
+
+      if (elements.startRace) {
+        elements.startRace.addEventListener("click", () => {
+          startRace(false);
+        });
+      }
+
+      elements.resultsBack.addEventListener("click", () => {
+        hideResults();
+        showScreen("map");
+      });
+
+      elements.resultsReplay.addEventListener("click", () => {
+        hideResults();
+        if (state.lastRaceConfig) {
+          showScreen("race");
+          toggleRaceSimulation(true);
+          startRace(true);
+        }
+      });
+
+      if (elements.legacyList) {
+        elements.legacyList.addEventListener("click", onLegacyAction);
+      }
+
+      if (elements.retiredList) {
+        elements.retiredList.addEventListener("click", onRetiredListAction);
+      }
+
+      window.addEventListener("resize", resizeCanvas);
   }
 
   function resizeCanvas() {
@@ -251,6 +389,14 @@
     renderLegacyGallery();
     updateMenuState();
     renderTrainingLog();
+      renderTrainingOptions();
+      updateTrainingMeta();
+      updateTrainingControls();
+      renderPaddock();
+      renderRaceRoster();
+      if (state.currentScreen === "retired") {
+        renderRetiredList();
+      }
   }
 
   function ensureAvatarSchema() {
@@ -405,6 +551,8 @@
     state.avatar = nextAvatar;
     state.avatar.style = record.style || record.styleName || state.avatar.style || "Pacer";
     state.tokenId = generateTokenId();
+      ensureHorseId(state.avatar);
+      state.avatar.tokenId = state.tokenId;
     state.trainingLog = [];
     state.lastTrainedStat = null;
 
@@ -413,23 +561,37 @@
     Storage.saveCurrentAvatar(state.avatar);
     Storage.saveTokenId(state.tokenId);
 
+      ensureAvatarInPaddock();
+      state.raceUi.selectedHorseId = state.avatar.id;
+
     addTrainingLog(`Revived a trainee inspired by ${record.name}.`, "success");
     refreshUI();
-    showScreen("menu");
+      showScreen("map");
   }
 
   function updateMenuState() {
-    const canTrain = state.avatar.sessions > 0;
-    elements.trainButton.disabled = !canTrain;
-    if (elements.retireButton) {
-      if (state.avatar.sessions === 0) {
-        elements.retireButton.disabled = false;
-        elements.retireButton.removeAttribute("hidden");
-      } else {
-        elements.retireButton.disabled = true;
-        elements.retireButton.setAttribute("hidden", "hidden");
+      const trainingNode = mapNodeLookup.training;
+      if (trainingNode) {
+        const canTrain = state.avatar.sessions > 0;
+        trainingNode.disabled = !canTrain;
+        trainingNode.classList.toggle("is-disabled", !canTrain);
       }
-    }
+
+      if (elements.mapRetireButton) {
+        const canRetire = state.avatar.sessions === 0;
+        elements.mapRetireButton.disabled = !canRetire;
+        elements.mapRetireButton.classList.toggle("is-available", canRetire);
+        elements.mapRetireButton.title = canRetire
+          ? "Retire this horse and archive their legacy"
+          : "Complete all training sessions before retiring";
+      }
+
+      const raceNode = mapNodeLookup.race;
+      if (raceNode) {
+        const hasActiveHorses = state.paddockSlots.some((slot) => slot && !slot.retired);
+        raceNode.disabled = !hasActiveHorses;
+        raceNode.classList.toggle("is-disabled", !hasActiveHorses);
+      }
   }
 
   function renderTrainingLog() {
@@ -448,51 +610,845 @@
     });
   }
 
-  function showScreen(screen) {
-    state.currentScreen = screen;
-    switch (screen) {
-      case "menu":
-        elements.menuScreen.hidden = false;
-        elements.trainingScreen.hidden = true;
-        elements.raceScreen.hidden = true;
-        break;
-      case "training":
-        elements.menuScreen.hidden = true;
-        elements.trainingScreen.hidden = false;
-        elements.raceScreen.hidden = true;
-        break;
-      case "race":
-        elements.menuScreen.hidden = true;
-        elements.trainingScreen.hidden = true;
-        elements.raceScreen.hidden = false;
-        drawRaceIdle();
-        break;
-    }
-  }
-
-  function onMenuAction(event) {
-    const action = event.currentTarget.dataset.action;
-    if (!action) return;
-
-    switch (action) {
-      case "train":
-        showScreen("training");
-        break;
-      case "race":
-        showScreen("race");
-        break;
-      case "retire":
-        if (state.avatar.sessions === 0) {
-          handleRetire();
+    function renderTrainingOptions() {
+      if (!elements.trainingOptions) return;
+      elements.trainingOptions.innerHTML = "";
+      TRAINING_OPTIONS.forEach((option) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.option = option.key;
+        button.className = "training-card";
+        if (state.trainingState.selectedKey === option.key) {
+          button.classList.add("is-selected");
         }
-        break;
-      case "reset":
-        handleReset();
-        break;
-      default:
-        break;
+        if (state.trainingState.running || state.avatar.sessions <= 0) {
+          button.disabled = state.trainingState.running;
+        }
+        button.innerHTML = `
+          <span class="title">${option.label}</span>
+          <span class="meta">${option.duration.toFixed(1)}s • ${(option.chance * 100).toFixed(0)}% success</span>
+          <span class="summary">${option.summary}</span>
+        `;
+        elements.trainingOptions.appendChild(button);
+      });
     }
-  }
+
+    function updateTrainingMeta() {
+      if (!elements.trainingMeta) return;
+      const option = TRAINING_OPTION_MAP[state.trainingState.selectedKey];
+      if (!option) {
+        elements.trainingMeta.innerHTML = "<p>Select a training focus to preview details.</p>";
+        return;
+      }
+      elements.trainingMeta.innerHTML = `
+        <h3>${option.label}</h3>
+        <p>${option.summary}</p>
+        <ul>
+          <li>Time required: ${option.duration.toFixed(1)} seconds</li>
+          <li>Likelihood of stat increase: ${(option.chance * 100).toFixed(0)}%</li>
+        </ul>
+      `;
+    }
+
+    function updateTrainingControls() {
+      if (!elements.startTraining) return;
+      const hasSessions = state.avatar.sessions > 0;
+      const running = state.trainingState.running;
+      const hasSelection = Boolean(state.trainingState.selectedKey);
+      elements.startTraining.disabled = !hasSessions || !hasSelection || running;
+      if (!hasSessions) {
+        elements.trainingTimer.textContent = "No sessions remaining.";
+      } else if (!running && elements.trainingTimer.textContent === "No sessions remaining.") {
+        elements.trainingTimer.textContent = "";
+      }
+    }
+
+    function onMapNodeClick(event) {
+      const node = event.currentTarget || event.target.closest(".map-node");
+      if (!node || node.disabled) return;
+      const target = node.dataset.screenTarget;
+      if (!target) return;
+      if (target === "training" && state.avatar.sessions <= 0) {
+        addTrainingLog("No training sessions remaining.", "warn");
+        return;
+      }
+      showScreen(target);
+    }
+
+    function onRetireClick() {
+      if (state.avatar.sessions === 0) {
+        handleRetire();
+      } else {
+        addTrainingLog("Complete remaining training sessions before retiring.", "warn");
+      }
+    }
+
+    function onTrainingOptionClick(event) {
+      if (state.trainingState.running) return;
+      const button = event.target.closest("[data-option]");
+      if (!button) return;
+      const key = button.dataset.option;
+      if (!key || !TRAINING_OPTION_MAP[key]) return;
+      state.trainingState.selectedKey = key;
+      renderTrainingOptions();
+      updateTrainingMeta();
+      updateTrainingControls();
+    }
+
+    function beginTrainingSession() {
+      if (state.trainingState.running) return;
+      const option = TRAINING_OPTION_MAP[state.trainingState.selectedKey];
+      if (!option) return;
+      if (state.avatar.sessions <= 0) {
+        addTrainingLog("No training sessions remaining.", "warn");
+        updateTrainingControls();
+        return;
+      }
+
+      state.trainingState.running = true;
+      state.trainingState.finishTime = performance.now() + option.duration * 1000;
+      elements.trainingTimer.textContent = `Training… ${option.duration.toFixed(1)}s remaining`;
+      updateTrainingControls();
+      renderTrainingOptions();
+
+      if (state.trainingState.intervalId) {
+        clearInterval(state.trainingState.intervalId);
+      }
+
+      state.trainingState.intervalId = setInterval(() => {
+        const remainingMs = Math.max(0, state.trainingState.finishTime - performance.now());
+        const remaining = remainingMs / 1000;
+        if (remaining <= 0.05) {
+          clearInterval(state.trainingState.intervalId);
+          state.trainingState.intervalId = null;
+          completeTrainingSession(option);
+          return;
+        }
+        if (elements.trainingTimer) {
+          elements.trainingTimer.textContent = `Training… ${remaining.toFixed(1)}s remaining`;
+        }
+      }, 100);
+    }
+
+    function completeTrainingSession(option) {
+      state.trainingState.running = false;
+      state.trainingState.finishTime = 0;
+      if (elements.trainingTimer) {
+        elements.trainingTimer.textContent = "Drill complete. Updating stats…";
+      }
+      handleTrain(option.key);
+      updateTrainingControls();
+      renderTrainingOptions();
+      setTimeout(() => {
+        if (!state.trainingState.running && elements.trainingTimer) {
+          elements.trainingTimer.textContent = "";
+        }
+      }, 1400);
+    }
+
+    function cancelTrainingTimer() {
+      if (state.trainingState.intervalId) {
+        clearInterval(state.trainingState.intervalId);
+        state.trainingState.intervalId = null;
+      }
+      state.trainingState.running = false;
+      state.trainingState.finishTime = 0;
+      if (elements.trainingTimer) {
+        elements.trainingTimer.textContent = "";
+      }
+    }
+
+    function loadPaddockFromStorage() {
+      const stored = Storage.loadPaddockSlots();
+      return Array.from({ length: 4 }, (_, index) => {
+        const entry = Array.isArray(stored) ? stored[index] : null;
+        return entry ? ensureHorseSchema(entry) : null;
+      });
+    }
+
+    function ensureHorseId(horse) {
+      if (!horse) return null;
+      if (!horse.id) {
+        horse.id = generateHorseId();
+      }
+      return horse.id;
+    }
+
+    function ensureHorseSchema(horse) {
+      if (!horse) return null;
+      const clone = deepClone(horse);
+      ensureHorseId(clone);
+      clone.name = clone.name || `Horse-${clone.id.slice(-4)}`;
+      clone.sessions = typeof clone.sessions === "number" ? clone.sessions : 5;
+      clone.stats = clone.stats || {};
+      ["stride", "endurance", "force", "resolve", "insight"].forEach((key) => {
+        clone.stats[key] = typeof clone.stats[key] === "number" ? clone.stats[key] : 50;
+      });
+      clone.mood = typeof clone.mood === "number" ? clone.mood : 75;
+      clone.skills = Array.isArray(clone.skills) ? clone.skills : [];
+      clone.modifiers = clone.modifiers || {
+        trainingBonus: 0.05,
+        skillChanceBonus: 0.05,
+        legendaryLuck: 0.08,
+        secondaryBonus: 0.08
+      };
+      clone.style = clone.style || clone.styleName || "Pacer";
+      clone.trainingLog = Array.isArray(clone.trainingLog)
+        ? clone.trainingLog.slice(Math.max(clone.trainingLog.length - 10, 0))
+        : [];
+      clone.retired = Boolean(clone.retired);
+      if (!clone.tokenId) {
+        clone.tokenId = generateTokenId();
+      }
+      return clone;
+    }
+
+    function ensureAvatarInPaddock() {
+      const snapshot = ensureHorseSchema({
+        ...state.avatar,
+        tokenId: state.tokenId,
+        trainingLog: state.trainingLog
+      });
+      if (!snapshot) return;
+      const index = state.paddockSlots.findIndex((slot) => slot && slot.id === snapshot.id);
+      if (index >= 0) {
+        state.paddockSlots[index] = snapshot;
+        if (state.paddockContext.selectedIndex == null) {
+          state.paddockContext.selectedIndex = index;
+        }
+      } else {
+        const emptyIndex = state.paddockSlots.findIndex((slot) => !slot);
+        const targetIndex = emptyIndex >= 0 ? emptyIndex : 0;
+        state.paddockSlots[targetIndex] = snapshot;
+        state.paddockContext.selectedIndex = targetIndex;
+      }
+      state.mainHorseId = snapshot.id;
+      Storage.savePaddockSlots(state.paddockSlots);
+    }
+
+    function syncActiveHorseToPaddock() {
+      const snapshot = ensureHorseSchema({
+        ...state.avatar,
+        tokenId: state.tokenId,
+        trainingLog: state.trainingLog
+      });
+      if (!snapshot) return;
+      const index = state.paddockSlots.findIndex((slot) => slot && slot.id === snapshot.id);
+      if (index >= 0) {
+        state.paddockSlots[index] = snapshot;
+      } else {
+        const emptyIndex = state.paddockSlots.findIndex((slot) => !slot);
+        state.paddockSlots[emptyIndex >= 0 ? emptyIndex : 0] = snapshot;
+      }
+      Storage.savePaddockSlots(state.paddockSlots);
+    }
+
+    function renderPaddock() {
+      if (!elements.paddockGrid) return;
+      elements.paddockGrid.innerHTML = "";
+      const slots = state.paddockSlots.length ? state.paddockSlots : [null, null, null, null];
+      slots.forEach((slot, index) => {
+        const card = document.createElement("div");
+        card.className = "paddock-slot";
+        card.dataset.index = index;
+
+        if (slot) {
+          card.classList.add("is-filled");
+          if (slot.id === state.mainHorseId) {
+            card.classList.add("is-main");
+          }
+          if (slot.retired) {
+            card.classList.add("is-retired");
+          }
+          card.innerHTML = `
+            <div class="slot-header">
+              <span class="slot-name">${slot.name}</span>
+              ${slot.id === state.mainHorseId ? '<span class="slot-tag">Main</span>' : ""}
+            </div>
+            <div class="slot-stats">Stride ${slot.stats.stride} · End ${slot.stats.endurance} · Force ${slot.stats.force}</div>
+            <div class="slot-footer">Sessions ${slot.sessions} · Mood ${Math.round(slot.mood)}%</div>
+          `;
+        } else {
+          card.classList.add("is-empty");
+          card.innerHTML = `
+            <div class="slot-empty">Empty Slot</div>
+            <div class="slot-hint">Click to add a horse</div>
+          `;
+        }
+
+        if (state.paddockContext.selectedIndex === index) {
+          card.classList.add("is-selected");
+        }
+
+        elements.paddockGrid.appendChild(card);
+      });
+      updatePaddockDetail();
+      hidePaddockContextMenu();
+    }
+
+    function updatePaddockDetail() {
+      if (!elements.paddockDetail) return;
+      const index = state.paddockContext.selectedIndex;
+      if (index == null || index < 0 || index >= state.paddockSlots.length) {
+        elements.paddockDetail.innerHTML = "<p>Select a slot to view horse details or create a new trainee.</p>";
+        return;
+      }
+      const slot = state.paddockSlots[index];
+      if (slot) {
+        renderHorseDetail(slot, index);
+      } else {
+        renderEmptySlotDetail(index);
+      }
+    }
+
+    function renderHorseDetail(horse, index) {
+      if (!elements.paddockDetail) return;
+      elements.paddockDetail.classList.remove("is-loading");
+      const statsList = ["stride", "endurance", "force", "resolve", "insight"]
+        .map((key) => `<li>${capitalize(key)} <span>${horse.stats[key]}</span></li>`)
+        .join("");
+      const sessionsLabel = horse.sessions === 1 ? "session" : "sessions";
+      const mainTag = horse.id === state.mainHorseId ? '<span class="detail-tag">Main</span>' : "";
+      elements.paddockDetail.innerHTML = `
+        <div class="detail-header">
+          <h3>${horse.name} ${mainTag}</h3>
+          <div class="detail-meta">Token ${horse.tokenId || "--"}</div>
+          <div class="detail-meta">${horse.sessions} ${sessionsLabel} remaining</div>
+        </div>
+        <div class="detail-body">
+          <ul class="detail-stats">${statsList}</ul>
+          <div class="detail-mood">Mood ${Math.round(horse.mood)}%</div>
+        </div>
+        <div class="detail-actions">
+          ${horse.id === state.mainHorseId ? "" : `<button type="button" data-detail-action="set-main" data-index="${index}">Set as Main Horse</button>`}
+          <button type="button" data-detail-action="release" data-index="${index}" class="danger">Release Horse</button>
+        </div>
+      `;
+    }
+
+    function renderEmptySlotDetail(index) {
+      if (!elements.paddockDetail) return;
+      elements.paddockDetail.classList.remove("is-loading");
+      elements.paddockDetail.innerHTML = `
+        <div class="detail-header">
+          <h3>Empty Slot</h3>
+          <p>Create a trainee or import an NFT horse.</p>
+        </div>
+        <div class="detail-actions">
+          <button type="button" data-detail-action="create" data-index="${index}" class="primary">Create Horse</button>
+          <button type="button" data-detail-action="import" data-index="${index}">Import from Wallet</button>
+        </div>
+        <p class="detail-hint">Imports trigger a placeholder action for now.</p>
+      `;
+    }
+
+    function onPaddockGridClick(event) {
+      const card = event.target.closest(".paddock-slot");
+      if (!card) return;
+      const index = Number(card.dataset.index);
+      if (Number.isNaN(index)) return;
+      state.paddockContext.selectedIndex = index;
+      renderPaddock();
+    }
+
+    function onPaddockContextMenu(event) {
+      const card = event.target.closest(".paddock-slot");
+      if (!card) return;
+      const index = Number(card.dataset.index);
+      const horse = state.paddockSlots[index];
+      if (!horse) return;
+      event.preventDefault();
+      state.paddockContext.selectedIndex = index;
+      renderPaddock();
+      showPaddockContextMenu(event, index);
+    }
+
+    function showPaddockContextMenu(event, index) {
+      if (!elements.paddockContextMenu) return;
+      const menu = elements.paddockContextMenu;
+      const bounds = elements.paddockScreen ? elements.paddockScreen.getBoundingClientRect() : null;
+      const offsetX = bounds ? event.clientX - bounds.left : event.clientX;
+      const offsetY = bounds ? event.clientY - bounds.top : event.clientY;
+      menu.style.left = `${Math.max(12, offsetX)}px`;
+      menu.style.top = `${Math.max(12, offsetY)}px`;
+      menu.dataset.index = index;
+      menu.hidden = false;
+    }
+
+    function hidePaddockContextMenu() {
+      if (!elements.paddockContextMenu) return;
+      elements.paddockContextMenu.hidden = true;
+      elements.paddockContextMenu.dataset.index = "";
+    }
+
+    function onPaddockContextMenuAction(event) {
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+      const action = button.dataset.action;
+      const menu = elements.paddockContextMenu;
+      const index = menu ? Number(menu.dataset.index) : NaN;
+      hidePaddockContextMenu();
+      if (Number.isNaN(index)) return;
+      if (action === "view") {
+        state.paddockContext.selectedIndex = index;
+        renderPaddock();
+      } else if (action === "set-main") {
+        setMainHorseByIndex(index);
+      } else if (action === "release") {
+        releaseHorseAtIndex(index);
+      }
+    }
+
+    function onPaddockDetailAction(event) {
+      const button = event.target.closest("[data-detail-action]");
+      if (!button) return;
+      const action = button.dataset.detailAction;
+      const index = Number(button.dataset.index);
+      if (Number.isNaN(index)) return;
+      switch (action) {
+        case "create":
+          createHorseInSlot(index);
+          break;
+        case "import":
+          importHorsePlaceholder(index);
+          break;
+        case "set-main":
+          setMainHorseByIndex(index);
+          break;
+        case "release":
+          releaseHorseAtIndex(index);
+          break;
+        default:
+          break;
+      }
+    }
+
+    function createHorseInSlot(index) {
+      const base = createBaseAvatar();
+      ensureHorseId(base);
+      base.tokenId = generateTokenId();
+      base.trainingLog = [];
+      const horse = ensureHorseSchema(base);
+      horse.origin = "created";
+      state.paddockSlots[index] = horse;
+      Storage.savePaddockSlots(state.paddockSlots);
+      state.paddockContext.selectedIndex = index;
+      addTrainingLog(`Created new trainee ${horse.name}.`, "info");
+      renderPaddock();
+    }
+
+    function importHorsePlaceholder(index) {
+      if (!elements.paddockDetail) return;
+      elements.paddockDetail.classList.add("is-loading");
+      elements.paddockDetail.innerHTML = `
+        <div class="detail-header">
+          <h3>Importing NFT horse…</h3>
+          <p>Connecting to wallet placeholder. Please wait.</p>
+        </div>
+      `;
+      setTimeout(() => {
+        const imported = ensureHorseSchema({
+          name: `NFT-${Math.floor(Math.random() * 900 + 100)}`,
+          sessions: 5,
+          stats: {
+            stride: 60 + Math.floor(Math.random() * 15),
+            endurance: 55 + Math.floor(Math.random() * 10),
+            force: 52 + Math.floor(Math.random() * 12),
+            resolve: 48 + Math.floor(Math.random() * 8),
+            insight: 50 + Math.floor(Math.random() * 10)
+          },
+          mood: 82,
+          origin: "imported",
+          tokenId: `NFT-${Math.floor(Math.random() * 9000 + 1000)}`,
+          trainingLog: []
+        });
+        state.paddockSlots[index] = imported;
+        Storage.savePaddockSlots(state.paddockSlots);
+        state.paddockContext.selectedIndex = index;
+        addTrainingLog(`Importing NFT horse... ${imported.name} is ready for training.`, "info");
+        renderPaddock();
+      }, 800);
+    }
+
+    function setMainHorseByIndex(index, { silent = false } = {}) {
+      const horse = state.paddockSlots[index];
+      if (!horse) return;
+      syncActiveHorseToPaddock();
+      state.avatar = ensureHorseSchema(horse);
+      state.tokenId = state.avatar.tokenId || state.tokenId || generateTokenId();
+      state.avatar.tokenId = state.tokenId;
+      state.trainingLog = Array.isArray(horse.trainingLog) ? [...horse.trainingLog] : [];
+      state.lastTrainedStat = null;
+      state.mainHorseId = state.avatar.id;
+      ensureAvatarSchema();
+      ensureAvatarInPaddock();
+      Storage.saveCurrentAvatar(state.avatar);
+      Storage.saveTokenId(state.tokenId);
+      if (!silent) {
+        addTrainingLog(`Set ${horse.name} as the main horse.`, "info");
+      }
+      refreshUI();
+    }
+
+    function setMainHorseById(id, options) {
+      const index = state.paddockSlots.findIndex((slot) => slot && slot.id === id);
+      if (index >= 0) {
+        setMainHorseByIndex(index, options);
+      }
+    }
+
+    function releaseHorseAtIndex(index) {
+      const horse = state.paddockSlots[index];
+      if (!horse) return;
+      const isMain = horse.id === state.mainHorseId;
+      const confirmRelease = window.confirm(
+        `Release ${horse.name}?${isMain ? " This is currently your main horse." : ""}`
+      );
+      if (!confirmRelease) return;
+
+      state.paddockSlots[index] = null;
+      Storage.savePaddockSlots(state.paddockSlots);
+
+      if (isMain) {
+        const nextIndex = state.paddockSlots.findIndex((slot) => slot);
+        if (nextIndex >= 0) {
+          setMainHorseByIndex(nextIndex, { silent: true });
+        } else {
+          const replacement = ensureHorseSchema(createBaseAvatar());
+          replacement.tokenId = generateTokenId();
+          state.avatar = replacement;
+          state.tokenId = replacement.tokenId;
+          state.trainingLog = [];
+          state.paddockSlots[0] = replacement;
+          state.mainHorseId = replacement.id;
+          Storage.saveCurrentAvatar(state.avatar);
+          Storage.saveTokenId(state.tokenId);
+          ensureAvatarInPaddock();
+        }
+      }
+
+      state.paddockContext.selectedIndex = state.paddockSlots.findIndex((slot) => slot);
+      if (state.paddockContext.selectedIndex === -1) {
+        state.paddockContext.selectedIndex = 0;
+      }
+      renderPaddock();
+      refreshUI();
+    }
+
+    function onGlobalPointerDown(event) {
+      if (!elements.paddockContextMenu || elements.paddockContextMenu.hidden) return;
+      const isMenu = event.target.closest("#paddock-context-menu");
+      if (isMenu) return;
+      const isSlot = event.target.closest(".paddock-slot");
+      if (isSlot) return;
+      hidePaddockContextMenu();
+    }
+
+    function onGlobalKeyDown(event) {
+      if (event.key === "Escape") {
+        hidePaddockContextMenu();
+        if (state.retiredUi.openAttachId) {
+          state.retiredUi.openAttachId = null;
+          renderRetiredList();
+        }
+      }
+    }
+
+    function getHorseById(id) {
+      if (!id) return null;
+      return state.paddockSlots.find((slot) => slot && slot.id === id) || null;
+    }
+
+    function renderRaceRoster() {
+      if (!elements.raceRoster) return;
+      const horses = state.paddockSlots.filter((slot) => slot && !slot.retired);
+      if (!horses.length) {
+        elements.raceRoster.innerHTML = "<p>No active horses available.</p>";
+        if (elements.raceStartPrototype) {
+          elements.raceStartPrototype.hidden = true;
+        }
+        return;
+      }
+
+      elements.raceRoster.innerHTML = "";
+      horses.forEach((horse) => {
+        const card = document.createElement("div");
+        card.className = "race-entry";
+        if (horse.id === state.mainHorseId) {
+          card.classList.add("is-main");
+        }
+        if (horse.id === state.raceUi.selectedHorseId) {
+          card.classList.add("is-selected");
+        }
+        card.innerHTML = `
+          <div class="race-entry-body">
+            <div class="race-entry-name">${horse.name}</div>
+            <div class="race-entry-stats">Stride ${horse.stats.stride} · End ${horse.stats.endurance} · Force ${horse.stats.force}</div>
+          </div>
+          <div class="race-entry-actions">
+            <button type="button" data-action="select" data-id="${horse.id}">Select</button>
+          </div>
+        `;
+        elements.raceRoster.appendChild(card);
+      });
+      updateRaceUi();
+    }
+
+    function updateRaceDetail(horse) {
+      if (!elements.racePlaceholder) return;
+      if (!horse) {
+        elements.racePlaceholder.innerHTML = "";
+        return;
+      }
+      elements.racePlaceholder.innerHTML = `
+        <div class="race-card">
+          <header>
+            <h3>${horse.name}${horse.id === state.mainHorseId ? ' <span class="tag">Main</span>' : ''}</h3>
+            <span class="token">Token ${horse.tokenId || "--"}</span>
+          </header>
+          <ul>
+            <li>Stride ${horse.stats.stride}</li>
+            <li>Endurance ${horse.stats.endurance}</li>
+            <li>Force ${horse.stats.force}</li>
+            <li>Resolve ${horse.stats.resolve}</li>
+            <li>Insight ${horse.stats.insight}</li>
+          </ul>
+        </div>
+      `;
+    }
+
+    function updateRaceUi() {
+      if (!elements.raceStartPrototype) return;
+      const selected = getHorseById(state.raceUi.selectedHorseId);
+      if (!selected) {
+        elements.raceStartPrototype.hidden = true;
+        if (elements.raceStatus && !state.raceUi.mockTimeoutId) {
+          elements.raceStatus.textContent = "Select a horse to start a mock race.";
+        }
+        return;
+      }
+      elements.raceStartPrototype.hidden = false;
+      const isMain = selected.id === state.mainHorseId;
+      elements.raceStartPrototype.textContent = isMain
+        ? "Launch Prototype Simulation"
+        : "Set as Main & Launch Simulation";
+      updateRaceDetail(selected);
+    }
+
+    function onRaceRosterAction(event) {
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+      const { action, id } = button.dataset;
+      if (action === "select") {
+        const horse = getHorseById(id);
+        if (!horse) return;
+        state.raceUi.selectedHorseId = horse.id;
+        startMockRace(horse);
+      }
+    }
+
+    function startMockRace(horse) {
+      stopMockRace();
+      state.raceUi.selectedHorseId = horse.id;
+      if (elements.raceStatus) {
+        elements.raceStatus.textContent = `Race Starting… ${horse.name} lines up at the gates.`;
+      }
+      if (elements.racePlaceholder) {
+        elements.racePlaceholder.innerHTML = `
+          <p class="mock-message">Race Starting… (placeholder sequence)</p>
+        `;
+      }
+      state.raceUi.mockTimeoutId = setTimeout(() => {
+        if (elements.raceStatus) {
+          elements.raceStatus.textContent = `${horse.name} completed the mock run. Future builds will stream live results.`;
+        }
+        if (elements.racePlaceholder) {
+          elements.racePlaceholder.innerHTML = `
+            <p class="mock-message">${horse.name} cools down after a virtual sprint.</p>
+          `;
+        }
+        state.raceUi.mockTimeoutId = null;
+      }, 2600);
+      updateRaceUi();
+    }
+
+    function stopMockRace() {
+      if (state.raceUi.mockTimeoutId) {
+        clearTimeout(state.raceUi.mockTimeoutId);
+        state.raceUi.mockTimeoutId = null;
+      }
+    }
+
+    function toggleRaceSimulation(show, { silent = false } = {}) {
+      if (!elements.raceSimWrapper) return;
+      elements.raceSimWrapper.hidden = !show;
+      if (elements.raceStartPrototype) {
+        elements.raceStartPrototype.hidden = show;
+      }
+      if (!show && !silent) {
+        if (elements.raceStatus) {
+          elements.raceStatus.textContent = "Select a horse to start a mock race.";
+        }
+        updateRaceDetail(getHorseById(state.raceUi.selectedHorseId));
+      }
+      updateRaceUi();
+    }
+
+    function openPrototypeSimulation() {
+      const horse = getHorseById(state.raceUi.selectedHorseId) || getHorseById(state.mainHorseId);
+      if (!horse) return;
+      if (horse.id !== state.mainHorseId) {
+        setMainHorseById(horse.id, { silent: true });
+      } else {
+        syncActiveHorseToPaddock();
+      }
+      toggleRaceSimulation(true);
+      if (elements.raceStatus) {
+        elements.raceStatus.textContent = `${state.avatar.name} ready for prototype simulation.`;
+      }
+      drawRaceIdle();
+    }
+
+    function renderRetiredList() {
+      if (!elements.retiredList) return;
+      const records = state.legacyRecords;
+      if (!records.length) {
+        elements.retiredList.innerHTML = "<p>No retired avatars yet.</p>";
+        return;
+      }
+
+      const activeHorses = state.paddockSlots.filter((slot) => slot && !slot.retired);
+      elements.retiredList.innerHTML = "";
+
+      records.forEach((record) => {
+        const card = document.createElement("div");
+        card.className = "retired-card";
+        card.dataset.id = record.id;
+        const date = record.retiredAt ? new Date(record.retiredAt).toLocaleDateString() : "--";
+        const recordLine = formatRaceRecord(record.record);
+        const attachOpen = state.retiredUi.openAttachId === record.id;
+        const attachOptions = activeHorses.length
+          ? activeHorses
+              .map(
+                (horse) => `<button type="button" data-action="attach-select" data-record="${record.id}" data-target="${horse.id}">${horse.name}</button>`
+              )
+              .join("")
+          : "<span class=\"attach-empty\">No active horses available.</span>";
+
+        card.innerHTML = `
+          <header>
+            <div>
+              <h3>${record.name}</h3>
+              <span class="retired-date">Retired ${date}</span>
+            </div>
+            <div class="retired-token">Token ${record.tokenId || "--"}</div>
+          </header>
+          <div class="retired-body">
+            <div class="retired-record">Record: ${recordLine}</div>
+            <div class="retired-style">Style: ${record.style || record.styleName || "--"}</div>
+          </div>
+            <div class="retired-actions">
+              <button type="button" data-action="attach" data-id="${record.id}">${attachOpen ? "Close Attach Menu" : "Attach to Horse"}</button>
+              <button type="button" data-action="revive" data-id="${record.id}" class="secondary">Revive</button>
+          </div>
+          <div class="attach-menu" data-attach="${record.id}" ${attachOpen ? "" : "hidden"}>
+            <p>Select active horse:</p>
+            <div class="attach-options">${attachOptions}</div>
+          </div>
+        `;
+
+        elements.retiredList.appendChild(card);
+      });
+    }
+
+    function formatRaceRecord(record) {
+      if (!record) return "0-0-0";
+      const wins = record.wins ?? record.first ?? 0;
+      const places = record.places ?? record.second ?? 0;
+      const shows = record.shows ?? record.third ?? 0;
+      return `${wins}-${places}-${shows}`;
+    }
+
+    function onRetiredListAction(event) {
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+      const action = button.dataset.action;
+      const recordId = button.dataset.id || button.dataset.record;
+      if (!action || !recordId) return;
+
+      if (action === "attach") {
+        state.retiredUi.openAttachId = state.retiredUi.openAttachId === recordId ? null : recordId;
+        renderRetiredList();
+      } else if (action === "attach-select") {
+        const targetId = button.dataset.target;
+        const horse = getHorseById(targetId);
+        const record = state.legacyRecords.find((entry) => entry.id === recordId);
+        if (horse && record) {
+          addTrainingLog(`Attached legacy of ${record.name} to ${horse.name} (placeholder).`, "info");
+        }
+        state.retiredUi.openAttachId = null;
+        renderRetiredList();
+      } else if (action === "revive") {
+        handleReviveLegacy(recordId);
+        state.retiredUi.openAttachId = null;
+        renderRetiredList();
+      }
+    }
+
+    function showScreen(screen) {
+      if (!screenMap[screen]) return;
+      if (state.currentScreen === screen) return;
+      handleScreenExit(state.currentScreen);
+      state.currentScreen = screen;
+      Object.entries(screenMap).forEach(([key, node]) => {
+        if (!node) return;
+        node.hidden = key !== screen;
+      });
+      handleScreenEnter(screen);
+    }
+
+    function handleScreenEnter(screen) {
+      switch (screen) {
+        case "map":
+          updateMenuState();
+          break;
+        case "training":
+          if (!state.trainingState.selectedKey) {
+            state.trainingState.selectedKey = TRAINING_OPTIONS[0]?.key || null;
+          }
+          renderTrainingOptions();
+          updateTrainingMeta();
+          updateTrainingControls();
+          break;
+        case "paddock":
+          renderPaddock();
+          break;
+        case "race":
+          renderRaceRoster();
+          updateRaceUi();
+          drawRaceIdle();
+          break;
+        case "retired":
+          renderRetiredList();
+          break;
+        default:
+          break;
+      }
+    }
+
+    function handleScreenExit(screen) {
+      switch (screen) {
+        case "training":
+          cancelTrainingTimer();
+          break;
+        case "race":
+          stopMockRace();
+          toggleRaceSimulation(false, { silent: true });
+          break;
+        default:
+          break;
+      }
+    }
 
   function handleTrain(stat) {
     if (state.avatar.sessions <= 0) {
@@ -579,6 +1535,7 @@
     }
 
     tryUnlockSkill(stat, modifiers);
+      syncActiveHorseToPaddock();
     Storage.saveCurrentAvatar(state.avatar);
     refreshUI();
 
@@ -628,6 +1585,9 @@
     );
     if (!confirmRetire) return;
 
+      const previousMainId = state.mainHorseId;
+      const previousSlotIndex = state.paddockSlots.findIndex((slot) => slot && slot.id === previousMainId);
+
     const record = {
       name: state.avatar.name,
       stats: deepClone(state.avatar.stats),
@@ -643,8 +1603,10 @@
     state.legacyRecords = Storage.addLegacyRecord(record);
 
     const nextAvatar = createBaseAvatar({ legacyBonus: true, legacyData: record });
+      ensureHorseId(nextAvatar);
     state.avatar = nextAvatar;
-    state.tokenId = generateTokenId();
+      state.tokenId = generateTokenId();
+      state.avatar.tokenId = state.tokenId;
     state.trainingLog = [];
     state.lastTrainedStat = null;
 
@@ -653,9 +1615,15 @@
     Storage.saveCurrentAvatar(state.avatar);
     Storage.saveTokenId(state.tokenId);
 
+      if (previousSlotIndex >= 0) {
+        state.paddockSlots[previousSlotIndex] = null;
+      }
+      ensureAvatarInPaddock();
+      state.raceUi.selectedHorseId = state.avatar.id;
+
     addTrainingLog("New legacy avatar created with boosted potential!", "success");
     refreshUI();
-    showScreen("menu");
+      showScreen("map");
   }
 
   function handleReset() {
@@ -668,6 +1636,14 @@
     state.trainingLog = [];
     state.lastTrainedStat = null;
     state.legacyRecords = [];
+      stopMockRace();
+      stopRace();
+      cancelTrainingTimer();
+      state.paddockSlots = [];
+      state.mainHorseId = null;
+      state.trainingState.selectedKey = TRAINING_OPTIONS[0]?.key || null;
+      state.raceUi.selectedHorseId = null;
+      state.retiredUi.openAttachId = null;
     init();
   }
 
@@ -2106,6 +3082,12 @@
   function capitalize(word) {
     return word.charAt(0).toUpperCase() + word.slice(1);
   }
+
+    function generateHorseId() {
+      const randomPart = Math.random().toString(36).slice(2, 8);
+      const timePart = Date.now().toString(36).slice(-4);
+      return `horse-${randomPart}-${timePart}`;
+    }
 
   function generateTokenId() {
     return `AVT-${Math.floor(Math.random() * 9000 + 1000)}`;

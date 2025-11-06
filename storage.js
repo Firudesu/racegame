@@ -4,7 +4,8 @@
   const STORAGE_KEYS = {
     current: "projectStride-current-avatar",
     token: "projectStride-token-id",
-    legacy: "projectStride-legacy-records"
+    legacy: "projectStride-legacy-records",
+    paddock: "projectStride-paddock-slots"
   };
 
   function safeParse(raw, fallback = null) {
@@ -104,10 +105,21 @@
     return trimmed;
   }
 
+  function loadPaddockSlots() {
+    const stored = safeParse(localStorage.getItem(STORAGE_KEYS.paddock), null);
+    if (!Array.isArray(stored)) return null;
+    return stored;
+  }
+
+  function savePaddockSlots(slots) {
+    localStorage.setItem(STORAGE_KEYS.paddock, JSON.stringify(slots));
+  }
+
   function resetAll() {
     localStorage.removeItem(STORAGE_KEYS.current);
     localStorage.removeItem(STORAGE_KEYS.token);
     localStorage.removeItem(STORAGE_KEYS.legacy);
+    localStorage.removeItem(STORAGE_KEYS.paddock);
   }
 
   window.ProjectStrideStorage = {
@@ -118,6 +130,8 @@
     saveTokenId,
     loadLegacyRecords,
     addLegacyRecord,
+    loadPaddockSlots,
+    savePaddockSlots,
     resetAll
   };
 })();
