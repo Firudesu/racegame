@@ -14,17 +14,17 @@
     </header>
 
     <main class="layout">
-        <aside class="sidebar">
-          <section class="avatar-info">
-            <h2>Avatar</h2>
-            <div class="avatar-name" id="avatar-name">--</div>
-            <div class="avatar-sessions">Sessions: <span id="avatar-sessions">0</span></div>
-            <div class="avatar-style">Style: <span id="avatar-style">--</span></div>
-            <div class="legacy-flag" id="legacy-flag"></div>
-          </section>
+      <aside class="sidebar" id="sidebar">
+        <section class="horse-info">
+          <h2>Selected Horse</h2>
+          <div class="horse-name" id="horse-name">--</div>
+          <div class="horse-sessions">Sessions: <span id="horse-sessions">0</span></div>
+          <div class="horse-style">Style: <span id="horse-style">--</span></div>
+          <div class="legacy-flag" id="legacy-flag"></div>
+        </section>
 
-          <section class="stats">
-            <h2>Stats</h2>
+        <section class="stats">
+          <h2>Stats</h2>
           <div class="stat" data-stat="stride">
             <span>Stride</span>
             <div class="stat-bar">
@@ -60,56 +60,74 @@
               <span class="value" id="stat-insight-value">0</span>
             </div>
           </div>
-            <div class="stat" data-stat="mood">
-              <span>Mood</span>
-              <div class="stat-bar">
-                <div class="bar" id="stat-mood"></div>
-                <span class="value" id="stat-mood-value">0</span>
-              </div>
+          <div class="stat" data-stat="mood">
+            <span>Mood</span>
+            <div class="stat-bar">
+              <div class="bar" id="stat-mood"></div>
+              <span class="value" id="stat-mood-value">0</span>
             </div>
+          </div>
         </section>
 
         <section class="skills">
           <h2>Skills</h2>
           <ul id="skill-list"></ul>
         </section>
-
-        <section class="legacy">
-          <h2>Legacy Gallery</h2>
-          <div class="legacy-list-wrapper">
-            <ul id="legacy-list" class="legacy-list"></ul>
-            <div class="legacy-empty" id="legacy-empty">No legacy champions yet.</div>
-          </div>
-        </section>
       </aside>
 
       <section class="content">
-        <div class="menu" id="menu-screen">
-          <h2>Main Menu</h2>
-          <p>Select an action for your avatar.</p>
-          <div class="menu-buttons">
-            <button data-action="train" class="primary">Train</button>
-            <button data-action="race" class="primary">Race</button>
-            <button data-action="retire">Retire</button>
-            <button data-action="reset" class="danger">Reset</button>
+        <!-- MAP MENU -->
+        <div class="map-menu" id="map-menu">
+          <h2>Map Menu</h2>
+          <p>Select a location to visit</p>
+          <div class="map-buttons">
+            <button data-location="training" class="location-btn primary">
+              <span class="btn-icon">🏋️</span>
+              <span>Training Grounds</span>
+            </button>
+            <button data-location="paddock" class="location-btn primary">
+              <span class="btn-icon">🐴</span>
+              <span>Paddock</span>
+            </button>
+            <button data-location="race" class="location-btn primary">
+              <span class="btn-icon">🏁</span>
+              <span>Race</span>
+            </button>
+            <button data-location="retired" class="location-btn primary">
+              <span class="btn-icon">🏆</span>
+              <span>Retired</span>
+            </button>
           </div>
+          <button data-action="reset" class="danger reset-btn">Reset All Data</button>
         </div>
 
-        <div class="training" id="training-screen" hidden>
-          <h2>Training Session</h2>
-          <p>Select a stat to focus on this session.</p>
-          <div class="training-buttons">
-            <button data-train="stride">Stride</button>
-            <button data-train="endurance">Endurance</button>
-            <button data-train="force">Force</button>
-            <button data-train="resolve">Resolve</button>
-            <button data-train="insight">Insight</button>
-          </div>
+        <!-- TRAINING GROUNDS -->
+        <div class="training-grounds" id="training-screen" hidden>
+          <h2>Training Grounds</h2>
+          <p>Select an aspect to train. Each session takes 3-5 seconds.</p>
+          <div id="training-options" class="training-options"></div>
           <div class="training-log" id="training-log"></div>
-          <button id="back-to-menu" class="secondary">Back to Menu</button>
+          <button id="back-to-map" class="secondary">Return to Map</button>
         </div>
 
-        <div class="race" id="race-screen" hidden>
+        <!-- PADDOCK -->
+        <div class="paddock" id="paddock-screen" hidden>
+          <h2>Paddock</h2>
+          <p>Manage your horses (4 slots available)</p>
+          <div class="paddock-slots" id="paddock-slots"></div>
+          <button id="paddock-back" class="secondary">Return to Map</button>
+        </div>
+
+        <!-- RACE SELECTION -->
+        <div class="race-selection" id="race-selection-screen" hidden>
+          <h2>Race</h2>
+          <p>Select a horse to race</p>
+          <div class="horse-selection-list" id="horse-selection-list"></div>
+          <button id="race-selection-back" class="secondary">Return to Map</button>
+        </div>
+
+        <!-- RACE VIEW -->
+        <div class="race-view" id="race-screen" hidden>
           <div class="race-header">
             <h2>Stride Derby</h2>
             <div class="hud">
@@ -128,8 +146,16 @@
           <canvas id="race-canvas" width="900" height="500"></canvas>
           <div class="race-controls">
             <button id="start-race" class="primary">Start Race</button>
-            <button id="race-back" class="secondary">Back to Menu</button>
+            <button id="race-back" class="secondary">Back to Selection</button>
           </div>
+        </div>
+
+        <!-- RETIRED -->
+        <div class="retired" id="retired-screen" hidden>
+          <h2>Retired Champions</h2>
+          <p>View your retired horses and use them for inheritance</p>
+          <div class="retired-list" id="retired-list"></div>
+          <button id="retired-back" class="secondary">Return to Map</button>
         </div>
       </section>
     </main>

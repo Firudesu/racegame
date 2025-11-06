@@ -78,18 +78,18 @@ body {
   letter-spacing: 0.02em;
 }
 
-.avatar-name {
+.horse-name {
   font-size: 1.4rem;
   font-weight: 600;
   margin-bottom: 6px;
 }
 
-.avatar-sessions {
+.horse-sessions {
   color: var(--muted);
   margin-bottom: 4px;
 }
 
-.avatar-style {
+.horse-style {
   color: var(--muted);
   margin-bottom: 4px;
   font-size: 0.95rem;
@@ -166,66 +166,6 @@ body {
   font-size: 0.9rem;
 }
 
-.legacy {
-  font-size: 0.9rem;
-  color: var(--muted);
-  line-height: 1.4;
-}
-
-.legacy-list-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.legacy-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.legacy-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(90, 200, 250, 0.25);
-  border-radius: 12px;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  color: var(--text);
-}
-
-.legacy-card header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-weight: 600;
-}
-
-.legacy-card .legacy-meta {
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.legacy-card .legacy-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 6px;
-}
-
-.legacy-card .legacy-actions button {
-  padding: 6px 10px;
-  font-size: 0.8rem;
-  border-radius: 999px;
-}
-
-.legacy-empty {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
 
 .content {
   padding: 32px;
@@ -238,27 +178,65 @@ body {
   flex: 1;
 }
 
-.menu,
-.training,
-.race {
+.map-menu,
+.training-grounds,
+.paddock,
+.race-selection,
+.race-view,
+.retired {
   max-width: 820px;
   margin: 0 auto;
 }
 
-.menu h2,
-.training h2,
-.race h2 {
+.map-menu h2,
+.training-grounds h2,
+.paddock h2,
+.race-selection h2,
+.race-view h2,
+.retired h2 {
   margin-top: 0;
   font-size: 1.6rem;
 }
 
-.menu-buttons,
-.training-buttons,
+.map-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.location-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 18px;
+  font-size: 1.1rem;
+  min-height: 120px;
+}
+
+.btn-icon {
+  font-size: 2.5rem;
+}
+
+.reset-btn {
+  margin-top: 24px;
+  width: 100%;
+}
+
 .race-controls {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 18px;
+}
+
+#back-to-map,
+#paddock-back,
+#race-selection-back,
+#race-back,
+#retired-back {
+  margin-top: 24px;
 }
 
 button {
@@ -297,6 +275,45 @@ button.danger {
   border: 1px solid rgba(248, 81, 73, 0.35);
 }
 
+/* Training Grounds */
+.training-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.training-option {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(90, 200, 250, 0.25);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.training-option.training-active {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.training-option-info h3 {
+  margin: 0 0 8px 0;
+  font-size: 1.1rem;
+}
+
+.training-option-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.training-option button {
+  padding: 8px 16px;
+}
+
 .training-log {
   margin-top: 24px;
   min-height: 80px;
@@ -322,6 +339,152 @@ button.danger {
 
 .training-log .warn {
   color: var(--danger);
+}
+
+/* Paddock */
+.paddock-slots {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.paddock-slot {
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(90, 200, 250, 0.25);
+  border-radius: 12px;
+  padding: 20px;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.paddock-slot.empty {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  color: var(--muted);
+}
+
+.paddock-slot.main-horse {
+  border-color: var(--accent);
+  background: rgba(90, 200, 250, 0.08);
+}
+
+.slot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.slot-name {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.slot-badge {
+  background: var(--accent);
+  color: #000;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.slot-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.slot-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.slot-actions button {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
+
+/* Horse Selection */
+.horse-selection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.horse-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(90, 200, 250, 0.25);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.horse-card-info h3 {
+  margin: 0 0 8px 0;
+  font-size: 1.1rem;
+}
+
+.horse-card-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.horse-card button {
+  padding: 10px 20px;
+}
+
+/* Retired */
+.retired-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.retired-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(90, 200, 250, 0.25);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.retired-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.retired-meta {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.retired-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.retired-actions button {
+  padding: 8px 14px;
+  font-size: 0.9rem;
 }
 
 .race-header {

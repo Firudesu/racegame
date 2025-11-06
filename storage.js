@@ -4,7 +4,9 @@
   const STORAGE_KEYS = {
     current: "projectStride-current-avatar",
     token: "projectStride-token-id",
-    legacy: "projectStride-legacy-records"
+    legacy: "projectStride-legacy-records",
+    paddock: "projectStride-paddock-horses",
+    mainHorse: "projectStride-main-horse-id"
   };
 
   function safeParse(raw, fallback = null) {
@@ -104,10 +106,85 @@
     return trimmed;
   }
 
+  function loadPaddockHorses() {
+    const stored = safeParse(localStorage.getItem(STORAGE_KEYS.paddock), []);
+    if (!Array.isArray(stored)) return [];
+    return stored.map(horse => {
+      if (!horse.id) {
+        horse.id = `horse-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      }
+      return horse;
+    });
+  }
+
+  function savePaddockHorses(horses) {
+    const validHorses = horses.filter(h => h && h.id).slice(0, 4);
+    localStorage.setItem(STORAGE_KEYS.paddock, JSON.stringify(validHorses));
+    return validHorses;
+  }
+
+  function addHorseToPaddock(horse) {
+    const horses = loadPaddockHorses();
+    if (horses.length >= 4) {
+      return { success: false, message: "Paddock is full (4 horses max)" };
+    }
+    if (!horse.id) {
+      horse.id = `horse-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+    horses.push(horse);
+    savePaddockHorses(horses);
+    return { success: true, horse };
+  }
+
+  function removeHorseFromPaddock(horseId) {
+    const horses = loadPaddockHorses();
+    const filtered = horses.filter(h => h.id !== horseId);
+    savePaddockHorses(filtered);
+    
+    const mainId = loadMainHorseId();
+    if (mainId === horseId) {
+      saveMainHorseId(null);
+    }
+    
+    return filtered;
+  }
+
+  function updateHorseInPaddock(horseId, updates) {
+    const horses = loadPaddockHorses();
+    const index = horses.findIndex(h => h.id === horseId);
+    if (index >= 0) {
+      horses[index] = { ...horses[index], ...updates };
+      savePaddockHorses(horses);
+      return horses[index];
+    }
+    return null;
+  }
+
+  function loadMainHorseId() {
+    return localStorage.getItem(STORAGE_KEYS.mainHorse);
+  }
+
+  function saveMainHorseId(horseId) {
+    if (horseId) {
+      localStorage.setItem(STORAGE_KEYS.mainHorse, horseId);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.mainHorse);
+    }
+  }
+
+  function getMainHorse() {
+    const mainId = loadMainHorseId();
+    if (!mainId) return null;
+    const horses = loadPaddockHorses();
+    return horses.find(h => h.id === mainId) || null;
+  }
+
   function resetAll() {
     localStorage.removeItem(STORAGE_KEYS.current);
     localStorage.removeItem(STORAGE_KEYS.token);
     localStorage.removeItem(STORAGE_KEYS.legacy);
+    localStorage.removeItem(STORAGE_KEYS.paddock);
+    localStorage.removeItem(STORAGE_KEYS.mainHorse);
   }
 
   window.ProjectStrideStorage = {
@@ -118,6 +195,14 @@
     saveTokenId,
     loadLegacyRecords,
     addLegacyRecord,
+    loadPaddockHorses,
+    savePaddockHorses,
+    addHorseToPaddock,
+    removeHorseFromPaddock,
+    updateHorseInPaddock,
+    loadMainHorseId,
+    saveMainHorseId,
+    getMainHorse,
     resetAll
   };
 })();

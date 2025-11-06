@@ -19,36 +19,38 @@
 
   const elements = {
     tokenId: document.getElementById("token-id"),
-    avatarName: document.getElementById("avatar-name"),
-    sessions: document.getElementById("avatar-sessions"),
-    avatarStyle: document.getElementById("avatar-style"),
+    horseName: document.getElementById("horse-name"),
+    sessions: document.getElementById("horse-sessions"),
+    horseStyle: document.getElementById("horse-style"),
     legacyFlag: document.getElementById("legacy-flag"),
     skillList: document.getElementById("skill-list"),
-    legacyList: document.getElementById("legacy-list"),
-    legacyEmpty: document.getElementById("legacy-empty"),
     trainingLog: document.getElementById("training-log"),
     hudPhase: document.getElementById("hud-phase"),
     hudTimer: document.getElementById("hud-timer"),
     hudRank: document.getElementById("hud-rank"),
     hudEnergy: document.getElementById("hud-energy"),
     hudSkills: document.getElementById("hud-skills"),
-    menuScreen: document.getElementById("menu-screen"),
+    mapMenu: document.getElementById("map-menu"),
     trainingScreen: document.getElementById("training-screen"),
+    paddockScreen: document.getElementById("paddock-screen"),
+    raceSelectionScreen: document.getElementById("race-selection-screen"),
     raceScreen: document.getElementById("race-screen"),
-    backToMenu: document.getElementById("back-to-menu"),
+    retiredScreen: document.getElementById("retired-screen"),
+    trainingOptions: document.getElementById("training-options"),
+    paddockSlots: document.getElementById("paddock-slots"),
+    horseSelectionList: document.getElementById("horse-selection-list"),
+    retiredList: document.getElementById("retired-list"),
+    backToMap: document.getElementById("back-to-map"),
+    paddockBack: document.getElementById("paddock-back"),
+    raceSelectionBack: document.getElementById("race-selection-back"),
     raceBack: document.getElementById("race-back"),
+    retiredBack: document.getElementById("retired-back"),
     startRace: document.getElementById("start-race"),
     resultsModal: document.getElementById("results-modal"),
     resultsBody: document.getElementById("results-body"),
     resultsBack: document.getElementById("results-back"),
     resultsReplay: document.getElementById("results-replay"),
-    menuButtons: document.querySelectorAll(".menu-buttons button"),
-    trainingButtons: document.querySelectorAll(".training-buttons button"),
     raceCanvas: document.getElementById("race-canvas"),
-    menuRoot: document.getElementById("menu-screen"),
-    retireButton: document.querySelector('button[data-action="retire"]'),
-    trainButton: document.querySelector('button[data-action="train"]'),
-    raceButton: document.querySelector('button[data-action="race"]'),
     resetButton: document.querySelector('button[data-action="reset"]')
   };
 
@@ -86,14 +88,16 @@
   resizeCanvas();
 
   const state = {
-    avatar: null,
+    paddockHorses: [],
+    mainHorseId: null,
+    selectedHorse: null,
     tokenId: null,
     legacyRecords: [],
     trainingLog: [],
-    lastTrainedStat: null,
-    currentScreen: "menu",
+    currentScreen: "map",
     race: null,
-    lastRaceConfig: null
+    lastRaceConfig: null,
+    trainingInProgress: false
   };
 
   const Sfx = createSfx();
@@ -139,19 +143,30 @@
 
   function init() {
     state.legacyRecords = Storage.loadLegacyRecords();
-    state.avatar = Storage.loadCurrentAvatar();
+    state.paddockHorses = Storage.loadPaddockHorses();
+    state.mainHorseId = Storage.loadMainHorseId();
     state.tokenId = Storage.loadTokenId();
 
-    if (!state.avatar) {
-      const legacyData = state.legacyRecords[0] || null;
-      state.avatar = createBaseAvatar({
-        legacyBonus: Boolean(legacyData),
-        legacyData
-      });
-      Storage.saveCurrentAvatar(state.avatar);
+    // Migrate old avatar to paddock system
+    const oldAvatar = Storage.loadCurrentAvatar();
+    if (oldAvatar && state.paddockHorses.length === 0) {
+      oldAvatar.id = `horse-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      ensureHorseSchema(oldAvatar);
+      Storage.addHorseToPaddock(oldAvatar);
+      Storage.saveMainHorseId(oldAvatar.id);
+      state.paddockHorses = [oldAvatar];
+      state.mainHorseId = oldAvatar.id;
     }
 
-    ensureAvatarSchema();
+    // Set selected horse to main horse or first available
+    if (state.mainHorseId) {
+      state.selectedHorse = state.paddockHorses.find(h => h.id === state.mainHorseId);
+    }
+    if (!state.selectedHorse && state.paddockHorses.length > 0) {
+      state.selectedHorse = state.paddockHorses[0];
+      state.mainHorseId = state.selectedHorse.id;
+      Storage.saveMainHorseId(state.mainHorseId);
+    }
 
     if (!state.tokenId) {
       state.tokenId = generateTokenId();
@@ -160,7 +175,7 @@
 
     bindEvents();
     refreshUI();
-    showScreen("menu");
+    showScreen("map");
     drawRaceIdle();
   }
 
@@ -168,36 +183,35 @@
     if (eventsBound) return;
     eventsBound = true;
 
-    elements.menuButtons.forEach((button) => {
-      button.addEventListener("click", onMenuAction);
-    });
-
-    elements.trainingButtons.forEach((button) => {
+    // Map menu buttons
+    document.querySelectorAll('[data-location]').forEach(button => {
       button.addEventListener("click", () => {
-        const stat = button.dataset.train;
-        handleTrain(stat);
+        const location = button.dataset.location;
+        handleLocationClick(location);
       });
     });
 
-    elements.backToMenu.addEventListener("click", () => {
-      showScreen("menu");
-    });
-
-    elements.raceBack.addEventListener("click", () => {
+    // Back buttons
+    elements.backToMap?.addEventListener("click", () => showScreen("map"));
+    elements.paddockBack?.addEventListener("click", () => showScreen("map"));
+    elements.raceSelectionBack?.addEventListener("click", () => showScreen("map"));
+    elements.retiredBack?.addEventListener("click", () => showScreen("map"));
+    
+    elements.raceBack?.addEventListener("click", () => {
       stopRace();
-      showScreen("menu");
+      showScreen("race-selection");
     });
 
-    elements.startRace.addEventListener("click", () => {
-      startRace(false);
-    });
-
-    elements.resultsBack.addEventListener("click", () => {
+    // Race buttons
+    elements.startRace?.addEventListener("click", () => startRace(false));
+    
+    // Results modal
+    elements.resultsBack?.addEventListener("click", () => {
       hideResults();
-      showScreen("menu");
+      showScreen("race-selection");
     });
 
-    elements.resultsReplay.addEventListener("click", () => {
+    elements.resultsReplay?.addEventListener("click", () => {
       hideResults();
       if (state.lastRaceConfig) {
         showScreen("race");
@@ -205,11 +219,10 @@
       }
     });
 
-    window.addEventListener("resize", resizeCanvas);
+    // Reset button
+    elements.resetButton?.addEventListener("click", handleReset);
 
-    if (elements.legacyList) {
-      elements.legacyList.addEventListener("click", onLegacyAction);
-    }
+    window.addEventListener("resize", resizeCanvas);
   }
 
   function resizeCanvas() {
@@ -229,82 +242,92 @@
   }
 
   function refreshUI() {
-    updateAvatarProfile();
     elements.tokenId.textContent = state.tokenId;
-    elements.avatarName.textContent = state.avatar.name;
-    elements.sessions.textContent = state.avatar.sessions;
-    if (elements.avatarStyle) {
-      elements.avatarStyle.textContent = state.avatar.style;
+    
+    if (state.selectedHorse) {
+      updateHorseProfile(state.selectedHorse);
+      elements.horseName.textContent = state.selectedHorse.name;
+      elements.sessions.textContent = state.selectedHorse.sessions;
+      elements.horseStyle.textContent = state.selectedHorse.style || "Pacer";
+      elements.legacyFlag.textContent = state.selectedHorse.legacy ? "Legacy boosted" : "";
+
+      Object.entries(state.selectedHorse.stats).forEach(([stat, value]) => {
+        const bar = statBars[stat];
+        if (!bar) return;
+        bar.bar.style.width = `${clamp(value, 0, 100)}%`;
+        bar.value.textContent = value;
+      });
+
+      updateMoodUI();
+      renderSkills();
+    } else {
+      elements.horseName.textContent = "No horse selected";
+      elements.sessions.textContent = "0";
+      elements.horseStyle.textContent = "--";
+      elements.legacyFlag.textContent = "";
+      elements.skillList.innerHTML = "";
     }
-    elements.legacyFlag.textContent = state.avatar.legacy ? "Legacy boosted" : "";
 
-    Object.entries(state.avatar.stats).forEach(([stat, value]) => {
-      const bar = statBars[stat];
-      if (!bar) return;
-      bar.bar.style.width = `${clamp(value, 0, 100)}%`;
-      bar.value.textContent = value;
-    });
-
-    updateMoodUI();
-
-    renderSkills();
-    renderLegacyGallery();
-    updateMenuState();
     renderTrainingLog();
   }
 
-  function ensureAvatarSchema() {
-    if (!state.avatar) return;
+  function ensureHorseSchema(horse) {
+    if (!horse) return;
 
-    if (typeof state.avatar.mood !== "number") {
-      state.avatar.mood = 75;
+    if (typeof horse.mood !== "number") {
+      horse.mood = 75;
     }
 
-    if (!state.avatar.style || !RACING_STYLES[state.avatar.style]) {
-      state.avatar.style = "Pacer";
+    if (!horse.style || !RACING_STYLES[horse.style]) {
+      horse.style = "Pacer";
     }
 
     const coreStats = ["stride", "endurance", "force", "resolve", "insight"];
-    state.avatar.stats = state.avatar.stats || {};
+    horse.stats = horse.stats || {};
     coreStats.forEach((key) => {
-      if (typeof state.avatar.stats[key] !== "number") {
-        state.avatar.stats[key] = 50;
+      if (typeof horse.stats[key] !== "number") {
+        horse.stats[key] = 50;
       }
     });
 
-    state.avatar.modifiers = state.avatar.modifiers || {};
-    const mods = state.avatar.modifiers;
+    horse.modifiers = horse.modifiers || {};
+    const mods = horse.modifiers;
     if (typeof mods.trainingBonus !== "number") {
-      mods.trainingBonus = state.avatar.legacy ? 0.12 : 0.05;
+      mods.trainingBonus = horse.legacy ? 0.12 : 0.05;
     }
     if (typeof mods.skillChanceBonus !== "number") {
-      mods.skillChanceBonus = state.avatar.legacy ? 0.12 : 0.05;
+      mods.skillChanceBonus = horse.legacy ? 0.12 : 0.05;
     }
     if (typeof mods.legendaryLuck !== "number") {
-      mods.legendaryLuck = state.avatar.legacy ? 0.25 : 0.08;
+      mods.legendaryLuck = horse.legacy ? 0.25 : 0.08;
     }
     if (typeof mods.secondaryBonus !== "number") {
-      mods.secondaryBonus = state.avatar.legacy ? 0.2 : 0.08;
+      mods.secondaryBonus = horse.legacy ? 0.2 : 0.08;
     }
 
-    if (!state.avatar.version || state.avatar.version < 3) {
-      state.avatar.version = 3;
+    if (!horse.version || horse.version < 3) {
+      horse.version = 3;
     }
 
-    updateAvatarProfile();
-    Storage.saveCurrentAvatar(state.avatar);
+    if (!horse.skills) {
+      horse.skills = [];
+    }
+
+    updateHorseProfile(horse);
   }
 
   function updateMoodUI() {
     const moodBar = statBars.mood;
-    if (!moodBar) return;
-    const mood = clamp(Math.round(state.avatar.mood ?? 0), 0, 100);
+    if (!moodBar || !state.selectedHorse) return;
+    const mood = clamp(Math.round(state.selectedHorse.mood ?? 0), 0, 100);
     moodBar.bar.style.width = `${mood}%`;
     moodBar.value.textContent = `${mood}%`;
   }
 
   function renderSkills() {
     elements.skillList.innerHTML = "";
+    if (!state.selectedHorse || !state.selectedHorse.skills) return;
+    
     const rarityLabels = {
       1: "Common",
       2: "Uncommon",
@@ -312,7 +335,7 @@
       4: "Epic",
       5: "Legendary"
     };
-    state.avatar.skills.forEach((skill) => {
+    state.selectedHorse.skills.forEach((skill) => {
       const li = document.createElement("li");
       const description = skill.description || skill.meta?.summary || formatSkillSummary(skill);
       const rarityText = rarityLabels[skill.rarity || 1] || "Common";
@@ -331,106 +354,6 @@
     return "Passive bonus";
   }
 
-  function renderLegacyGallery() {
-    const list = elements.legacyList;
-    const empty = elements.legacyEmpty;
-    if (!list || !empty) return;
-
-    list.innerHTML = "";
-    if (!state.legacyRecords.length) {
-      empty.hidden = false;
-      return;
-    }
-
-    empty.hidden = true;
-
-    state.legacyRecords.forEach((entry) => {
-      const li = document.createElement("li");
-      li.className = "legacy-card";
-
-      const skillPreview = entry.skills?.length
-        ? `${entry.skills
-            .slice(0, 3)
-            .map((s) => s.name)
-            .join(", ")}${entry.skills.length > 3 ? ` +${entry.skills.length - 3}` : ""}`
-        : "None";
-      const retiredAt = new Date(entry.retiredAt).toLocaleDateString();
-      const distanceLabel = entry.aptitudes?.distance?.type || "Balanced";
-      const surfaceLabel = entry.aptitudes?.surface?.preferred || "Balanced";
-      const passingLabel = entry.aptitudes?.passing?.rating
-        ? `${entry.aptitudes.passing.rating}`
-        : "--";
-
-      li.innerHTML = `
-        <header>
-          <span>${entry.name}</span>
-          <span class="legacy-meta">${retiredAt}</span>
-        </header>
-        <div class="legacy-meta">Token ${entry.tokenId} • Mood ${entry.mood ?? 0}%</div>
-        <div class="legacy-meta">Style: ${entry.style || entry.styleName || "Unknown"}</div>
-        <div class="legacy-meta">Distance: ${distanceLabel} • Surface: ${surfaceLabel} • Passing: ${passingLabel}</div>
-        <div class="legacy-meta">Skills: ${skillPreview}</div>
-        <div class="legacy-actions">
-          <button data-action="revive" data-id="${entry.id}" class="secondary">Revive</button>
-        </div>
-      `;
-
-      list.appendChild(li);
-    });
-  }
-
-  function onLegacyAction(event) {
-    const button = event.target.closest("button[data-action]");
-    if (!button) return;
-
-    const action = button.dataset.action;
-    const id = button.dataset.id;
-    if (!action || !id) return;
-
-    if (action === "revive") {
-      handleReviveLegacy(id);
-    }
-  }
-
-  function handleReviveLegacy(id) {
-    const record = state.legacyRecords.find((entry) => entry.id === id);
-    if (!record) return;
-
-    const confirmation = window.confirm(
-      `Create a new trainee inspired by ${record.name}? They will gain legacy bonuses based on this champion.`
-    );
-    if (!confirmation) return;
-
-    const nextAvatar = createBaseAvatar({ legacyBonus: true, legacyData: record });
-    state.avatar = nextAvatar;
-    state.avatar.style = record.style || record.styleName || state.avatar.style || "Pacer";
-    state.tokenId = generateTokenId();
-    state.trainingLog = [];
-    state.lastTrainedStat = null;
-
-    updateAvatarProfile();
-
-    Storage.saveCurrentAvatar(state.avatar);
-    Storage.saveTokenId(state.tokenId);
-
-    addTrainingLog(`Revived a trainee inspired by ${record.name}.`, "success");
-    refreshUI();
-    showScreen("menu");
-  }
-
-  function updateMenuState() {
-    const canTrain = state.avatar.sessions > 0;
-    elements.trainButton.disabled = !canTrain;
-    if (elements.retireButton) {
-      if (state.avatar.sessions === 0) {
-        elements.retireButton.disabled = false;
-        elements.retireButton.removeAttribute("hidden");
-      } else {
-        elements.retireButton.disabled = true;
-        elements.retireButton.setAttribute("hidden", "hidden");
-      }
-    }
-  }
 
   function renderTrainingLog() {
     if (!elements.trainingLog) return;
@@ -450,156 +373,424 @@
 
   function showScreen(screen) {
     state.currentScreen = screen;
+    
+    // Hide all screens
+    elements.mapMenu.hidden = true;
+    elements.trainingScreen.hidden = true;
+    elements.paddockScreen.hidden = true;
+    elements.raceSelectionScreen.hidden = true;
+    elements.raceScreen.hidden = true;
+    elements.retiredScreen.hidden = true;
+    
+    // Show selected screen
     switch (screen) {
-      case "menu":
-        elements.menuScreen.hidden = false;
-        elements.trainingScreen.hidden = true;
-        elements.raceScreen.hidden = true;
+      case "map":
+        elements.mapMenu.hidden = false;
         break;
       case "training":
-        elements.menuScreen.hidden = true;
         elements.trainingScreen.hidden = false;
-        elements.raceScreen.hidden = true;
+        renderTrainingScreen();
+        break;
+      case "paddock":
+        elements.paddockScreen.hidden = false;
+        renderPaddockScreen();
+        break;
+      case "race-selection":
+        elements.raceSelectionScreen.hidden = false;
+        renderRaceSelectionScreen();
         break;
       case "race":
-        elements.menuScreen.hidden = true;
-        elements.trainingScreen.hidden = true;
         elements.raceScreen.hidden = false;
         drawRaceIdle();
         break;
+      case "retired":
+        elements.retiredScreen.hidden = false;
+        renderRetiredScreen();
+        break;
     }
   }
 
-  function onMenuAction(event) {
-    const action = event.currentTarget.dataset.action;
-    if (!action) return;
-
-    switch (action) {
-      case "train":
+  function handleLocationClick(location) {
+    switch (location) {
+      case "training":
+        if (!state.selectedHorse) {
+          alert("Please select a horse from the Paddock first!");
+          return;
+        }
         showScreen("training");
         break;
+      case "paddock":
+        showScreen("paddock");
+        break;
       case "race":
-        showScreen("race");
+        showScreen("race-selection");
         break;
-      case "retire":
-        if (state.avatar.sessions === 0) {
-          handleRetire();
-        }
-        break;
-      case "reset":
-        handleReset();
-        break;
-      default:
+      case "retired":
+        showScreen("retired");
         break;
     }
   }
 
-  function handleTrain(stat) {
-    if (state.avatar.sessions <= 0) {
+  // ============================================================================
+  // TRAINING GROUNDS SCREEN
+  // ============================================================================
+  function renderTrainingScreen() {
+    if (!state.selectedHorse) return;
+    
+    elements.trainingOptions.innerHTML = "";
+    
+    const stats = ["stride", "endurance", "force", "resolve", "insight"];
+    stats.forEach(stat => {
+      const duration = 3 + Math.random() * 2; // 3-5 seconds
+      const likelihood = 40 + Math.random() * 30; // 40-70%
+      
+      const optionDiv = document.createElement("div");
+      optionDiv.className = "training-option";
+      if (state.trainingInProgress) {
+        optionDiv.classList.add("training-active");
+      }
+      
+      optionDiv.innerHTML = `
+        <div class="training-option-info">
+          <h3>${capitalize(stat)}</h3>
+          <div class="training-option-meta">
+            <span>Time: ${duration.toFixed(1)}s</span>
+            <span>Success Rate: ${likelihood.toFixed(0)}%</span>
+          </div>
+        </div>
+        <button class="primary" data-stat="${stat}" data-duration="${duration}" data-likelihood="${likelihood}">
+          Start Training
+        </button>
+      `;
+      
+      const button = optionDiv.querySelector("button");
+      button.addEventListener("click", () => {
+        handleTraining(stat, duration, likelihood);
+      });
+      
+      elements.trainingOptions.appendChild(optionDiv);
+    });
+  }
+
+  function handleTraining(stat, duration, likelihood) {
+    if (state.trainingInProgress) return;
+    if (!state.selectedHorse || state.selectedHorse.sessions <= 0) {
       addTrainingLog("No training sessions remaining.", "warn");
-      refreshUI();
       return;
     }
 
-    updateAvatarProfile();
-    const beforeProfile = deepClone(state.avatar.profile || buildRacingProfile(state.avatar.stats));
-    const modifiers = state.avatar.modifiers || {};
-    const legendaryLuck = modifiers.legendaryLuck || 0;
-    const secondaryBonus = modifiers.secondaryBonus || 0;
+    state.trainingInProgress = true;
+    addTrainingLog(`Starting ${capitalize(stat)} training...`, "info");
+    
+    // Disable all training buttons
+    document.querySelectorAll(".training-option").forEach(opt => {
+      opt.classList.add("training-active");
+    });
 
-    const sameStat = state.lastTrainedStat === stat;
-    const penalty = sameStat ? 0.75 : 1;
-    const bonus = 1 + (state.avatar.modifiers?.trainingBonus || 0);
-    const variance = 0.85 + Math.random() * (0.45 + legendaryLuck);
-    let gain = Math.round(
-      TRAINING_BASE_GAIN * penalty * bonus * (1 + secondaryBonus * 0.25) * variance
-    );
-    gain = Math.max(2, gain);
-
-    playSfx("train");
-
-    state.avatar.stats[stat] = clamp(state.avatar.stats[stat] + gain, 0, 100);
-
-    const secondaryMap = {
-      stride: "force",
-      endurance: "resolve",
-      force: "stride",
-      resolve: "insight",
-      insight: "resolve"
-    };
-    const secondaryTarget = secondaryMap[stat];
-    if (secondaryTarget) {
-      const secondaryChance = 0.25 + secondaryBonus * 0.5 + legendaryLuck * 0.3;
-      if (Math.random() < secondaryChance) {
-        const secondaryGain = Math.max(1, Math.round(gain * (0.2 + secondaryBonus * 0.3)));
-        state.avatar.stats[secondaryTarget] = clamp(
-          (state.avatar.stats[secondaryTarget] || 0) + secondaryGain,
+    setTimeout(() => {
+      const success = Math.random() * 100 < likelihood;
+      
+      if (success) {
+        const gain = Math.floor(5 + Math.random() * 8); // 5-12 points
+        state.selectedHorse.stats[stat] = clamp(
+          (state.selectedHorse.stats[stat] || 50) + gain,
           0,
           100
         );
-        addTrainingLog(
-          `Secondary aptitude improved (${capitalize(secondaryTarget)} +${secondaryGain}).`,
-          "info"
-        );
+        addTrainingLog(`${capitalize(stat)} improved by +${gain}!`, "success");
+      } else {
+        addTrainingLog(`Training completed but no improvement this time.`, "info");
       }
-    }
-
-    state.avatar.sessions -= 1;
-    state.lastTrainedStat = stat;
-    addTrainingLog(`Focused on ${capitalize(stat)}: +${gain} points.`);
-
-    const moodShift = adjustMood(sameStat ? -7 : -5);
-    if (moodShift) {
-      addTrainingLog(
-        `Training impact on mood ${moodShift > 0 ? "+" : ""}${moodShift}.`,
-        moodShift > 0 ? "success" : "info"
+      
+      state.selectedHorse.sessions -= 1;
+      
+      // Mood adjustment
+      const moodChange = success ? -3 : -5;
+      state.selectedHorse.mood = clamp(
+        (state.selectedHorse.mood || 75) + moodChange,
+        0,
+        100
       );
+      
+      // Try to unlock skill
+      tryUnlockSkill(stat, state.selectedHorse.modifiers || {});
+      
+      // Save and update
+      Storage.updateHorseInPaddock(state.selectedHorse.id, state.selectedHorse);
+      state.paddockHorses = Storage.loadPaddockHorses();
+      
+      state.trainingInProgress = false;
+      refreshUI();
+      renderTrainingScreen();
+      
+      if (state.selectedHorse.sessions === 0) {
+        addTrainingLog("All training sessions complete! Visit Retired to archive this horse.", "success");
+      }
+    }, duration * 1000);
+  }
+
+  // ============================================================================
+  // PADDOCK SCREEN
+  // ============================================================================
+  function renderPaddockScreen() {
+    elements.paddockSlots.innerHTML = "";
+    
+    for (let i = 0; i < 4; i++) {
+      const horse = state.paddockHorses[i];
+      const slotDiv = document.createElement("div");
+      
+      if (horse) {
+        const isMain = horse.id === state.mainHorseId;
+        slotDiv.className = `paddock-slot ${isMain ? "main-horse" : ""}`;
+        
+        slotDiv.innerHTML = `
+          <div class="slot-header">
+            <div class="slot-name">${horse.name}</div>
+            ${isMain ? '<div class="slot-badge">MAIN</div>' : ""}
+          </div>
+          <div class="slot-stats">
+            <span>Sessions: ${horse.sessions}</span>
+            <span>Style: ${horse.style || "Pacer"}</span>
+          </div>
+          <div class="slot-stats">
+            <span>Stride: ${horse.stats.stride}</span>
+            <span>Force: ${horse.stats.force}</span>
+            <span>Resolve: ${horse.stats.resolve}</span>
+          </div>
+          <div class="slot-actions">
+            <button class="secondary view-btn" data-id="${horse.id}">View</button>
+            ${!isMain ? `<button class="primary set-main-btn" data-id="${horse.id}">Set Main</button>` : ""}
+            ${horse.sessions === 0 ? `<button class="primary retire-horse-btn" data-id="${horse.id}">Retire</button>` : ""}
+            <button class="danger release-btn" data-id="${horse.id}">Release</button>
+          </div>
+        `;
+        
+        slotDiv.querySelector(".view-btn").addEventListener("click", () => {
+          state.selectedHorse = horse;
+          refreshUI();
+        });
+        
+        const setMainBtn = slotDiv.querySelector(".set-main-btn");
+        if (setMainBtn) {
+          setMainBtn.addEventListener("click", () => {
+            state.mainHorseId = horse.id;
+            state.selectedHorse = horse;
+            Storage.saveMainHorseId(horse.id);
+            refreshUI();
+            renderPaddockScreen();
+          });
+        }
+        
+        const retireBtn = slotDiv.querySelector(".retire-horse-btn");
+        if (retireBtn) {
+          retireBtn.addEventListener("click", () => {
+            handleRetireHorse(horse);
+          });
+        }
+        
+        slotDiv.querySelector(".release-btn").addEventListener("click", () => {
+          if (confirm(`Release ${horse.name}? This cannot be undone.`)) {
+            Storage.removeHorseFromPaddock(horse.id);
+            state.paddockHorses = Storage.loadPaddockHorses();
+            if (state.selectedHorse?.id === horse.id) {
+              state.selectedHorse = state.paddockHorses[0] || null;
+            }
+            state.mainHorseId = Storage.loadMainHorseId();
+            refreshUI();
+            renderPaddockScreen();
+          }
+        });
+      } else {
+        slotDiv.className = "paddock-slot empty";
+        slotDiv.innerHTML = `
+          <div>Empty Slot</div>
+          <button class="primary create-horse-btn">Create Horse</button>
+          <button class="secondary import-horse-btn">Import from Wallet</button>
+        `;
+        
+        slotDiv.querySelector(".create-horse-btn").addEventListener("click", () => {
+          const newHorse = createBaseAvatar({ legacyBonus: false });
+          newHorse.id = `horse-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          ensureHorseSchema(newHorse);
+          
+          const result = Storage.addHorseToPaddock(newHorse);
+          if (result.success) {
+            state.paddockHorses = Storage.loadPaddockHorses();
+            if (!state.mainHorseId) {
+              state.mainHorseId = newHorse.id;
+              Storage.saveMainHorseId(newHorse.id);
+            }
+            state.selectedHorse = newHorse;
+            refreshUI();
+            renderPaddockScreen();
+          } else {
+            alert(result.message);
+          }
+        });
+        
+        slotDiv.querySelector(".import-horse-btn").addEventListener("click", () => {
+          alert("Importing NFT horse... (Coming soon: MetaMask integration)");
+        });
+      }
+      
+      elements.paddockSlots.appendChild(slotDiv);
     }
+  }
 
-    updateAvatarProfile();
-
-    const afterProfile = state.avatar.profile || buildRacingProfile(state.avatar.stats);
-    if (beforeProfile && afterProfile) {
-      const passingDiff =
-        (afterProfile.aptitudes?.passing?.rating || 0) -
-        (beforeProfile.aptitudes?.passing?.rating || 0);
-      if (passingDiff >= 2) {
-        addTrainingLog(`Passing aptitude improved by ${passingDiff} points.`, "info");
-      }
-      const beforeDistance = beforeProfile.aptitudes?.distance?.type;
-      const afterDistance = afterProfile.aptitudes?.distance?.type;
-      if (afterDistance && afterDistance !== beforeDistance) {
-        addTrainingLog(`Distance aptitude now favors ${afterDistance} runs.`, "success");
-      }
-      const phaseBefore = beforeProfile.aptitudes?.phase?.focus;
-      const phaseAfter = afterProfile.aptitudes?.phase?.focus;
-      if (phaseAfter && phaseAfter !== phaseBefore) {
-        addTrainingLog(`Race phase focus shifted toward the ${phaseAfter}.`, "info");
-      }
+  // ============================================================================
+  // RACE SELECTION SCREEN
+  // ============================================================================
+  function renderRaceSelectionScreen() {
+    elements.horseSelectionList.innerHTML = "";
+    
+    const availableHorses = state.paddockHorses.filter(h => h && h.sessions >= 0);
+    
+    if (availableHorses.length === 0) {
+      elements.horseSelectionList.innerHTML = `
+        <div style="text-align: center; padding: 40px; color: var(--muted);">
+          No horses available to race. Create horses in the Paddock first!
+        </div>
+      `;
+      return;
     }
+    
+    availableHorses.forEach(horse => {
+      const cardDiv = document.createElement("div");
+      cardDiv.className = "horse-card";
+      
+      cardDiv.innerHTML = `
+        <div class="horse-card-info">
+          <h3>${horse.name}</h3>
+          <div class="horse-card-stats">
+            <span>Stride: ${horse.stats.stride}</span>
+            <span>Endurance: ${horse.stats.endurance}</span>
+            <span>Force: ${horse.stats.force}</span>
+          </div>
+        </div>
+        <button class="primary select-horse-btn" data-id="${horse.id}">Select</button>
+      `;
+      
+      cardDiv.querySelector(".select-horse-btn").addEventListener("click", () => {
+        state.selectedHorse = horse;
+        state.mainHorseId = horse.id;
+        Storage.saveMainHorseId(horse.id);
+        refreshUI();
+        showScreen("race");
+      });
+      
+      elements.horseSelectionList.appendChild(cardDiv);
+    });
+  }
 
-    tryUnlockSkill(stat, modifiers);
-    Storage.saveCurrentAvatar(state.avatar);
-    refreshUI();
+  // ============================================================================
+  // RETIRED SCREEN
+  // ============================================================================
+  function renderRetiredScreen() {
+    elements.retiredList.innerHTML = "";
+    
+    if (state.legacyRecords.length === 0) {
+      elements.retiredList.innerHTML = `
+        <div style="text-align: center; padding: 40px; color: var(--muted);">
+          No retired champions yet.
+        </div>
+      `;
+      return;
+    }
+    
+    state.legacyRecords.forEach(record => {
+      const cardDiv = document.createElement("div");
+      cardDiv.className = "retired-card";
+      
+      const retiredAt = new Date(record.retiredAt).toLocaleDateString();
+      const skillPreview = record.skills?.length
+        ? record.skills.slice(0, 3).map(s => s.name).join(", ")
+        : "None";
+      
+      cardDiv.innerHTML = `
+        <div class="retired-card-header">
+          <span>${record.name}</span>
+          <span>${retiredAt}</span>
+        </div>
+        <div class="retired-meta">Token: ${record.tokenId} • Style: ${record.style || "Unknown"}</div>
+        <div class="retired-meta">Sessions Completed • Mood: ${record.mood ?? 75}%</div>
+        <div class="retired-meta">Skills: ${skillPreview}</div>
+        <div class="retired-actions">
+          <button class="primary attach-btn" data-id="${record.id}">Attach to Horse</button>
+        </div>
+      `;
+      
+      cardDiv.querySelector(".attach-btn").addEventListener("click", () => {
+        handleAttachRetired(record);
+      });
+      
+      elements.retiredList.appendChild(cardDiv);
+    });
+  }
 
-    if (state.avatar.sessions === 0) {
-      addTrainingLog("Training complete. Consider retiring to gain legacy bonuses.", "info");
+  function handleAttachRetired(retiredRecord) {
+    if (state.paddockHorses.length === 0) {
+      alert("No active horses in paddock to attach to!");
+      return;
+    }
+    
+    const horseList = state.paddockHorses
+      .map((h, idx) => `${idx + 1}. ${h.name}`)
+      .join("\n");
+    
+    const selection = prompt(
+      `Select a horse to attach ${retiredRecord.name}'s legacy to:\n\n${horseList}\n\nEnter number (1-${state.paddockHorses.length}):`
+    );
+    
+    if (!selection) return;
+    
+    const index = parseInt(selection) - 1;
+    if (index >= 0 && index < state.paddockHorses.length) {
+      const targetHorse = state.paddockHorses[index];
+      
+      // Create new legacy horse based on retired and current
+      const newHorse = createBaseAvatar({ 
+        legacyBonus: true, 
+        legacyData: retiredRecord 
+      });
+      newHorse.id = targetHorse.id;
+      newHorse.name = targetHorse.name;
+      newHorse.style = retiredRecord.style || targetHorse.style;
+      
+      // Merge stats
+      Object.keys(newHorse.stats).forEach(stat => {
+        newHorse.stats[stat] = Math.floor(
+          (targetHorse.stats[stat] + retiredRecord.stats[stat]) / 2
+        );
+      });
+      
+      ensureHorseSchema(newHorse);
+      Storage.updateHorseInPaddock(newHorse.id, newHorse);
+      state.paddockHorses = Storage.loadPaddockHorses();
+      
+      if (state.selectedHorse?.id === newHorse.id) {
+        state.selectedHorse = newHorse;
+      }
+      
+      alert(`${retiredRecord.name}'s legacy has been attached to ${targetHorse.name}!`);
+      refreshUI();
+    } else {
+      alert("Invalid selection.");
     }
   }
 
   function tryUnlockSkill(stat, modifiers = {}) {
-    if (state.avatar.skills.length >= 3) return;
+    if (!state.selectedHorse || state.selectedHorse.skills.length >= 3) return;
 
-    const insight = state.avatar.stats.insight;
+    const insight = state.selectedHorse.stats.insight;
     let chance = 0.1 + Math.max(0, insight - 40) * 0.005;
-    chance += state.avatar.modifiers?.skillChanceBonus || 0;
+    chance += state.selectedHorse.modifiers?.skillChanceBonus || 0;
     if (modifiers.legendaryLuck) {
       chance += modifiers.legendaryLuck * 0.4;
     }
     chance = clamp(chance, 0, 0.95);
 
     if (Math.random() < chance) {
-      const existingNames = state.avatar.skills.map((s) => s.name);
+      const existingNames = state.selectedHorse.skills.map((s) => s.name);
       const rarityBias = clamp(
         (modifiers.legendaryLuck || 0) * 1.1 + (modifiers.secondaryBonus || 0) * 0.4,
         0,
@@ -607,68 +798,67 @@
       );
       const newSkill = pickRandomSkill(existingNames, rarityBias);
       if (newSkill) {
-        state.avatar.skills.push(newSkill);
+        state.selectedHorse.skills.push(newSkill);
         addTrainingLog(`Unlocked skill: ${newSkill.name}!`, "success");
-        const uplift = adjustMood(4);
-        if (uplift) {
-          addTrainingLog(
-            `Skill breakthrough boosted mood ${uplift > 0 ? "+" : ""}${uplift}.`,
-            "success"
-          );
-        }
+        
+        const moodChange = 4;
+        state.selectedHorse.mood = clamp(
+          (state.selectedHorse.mood || 75) + moodChange,
+          0,
+          100
+        );
+        addTrainingLog(`Skill breakthrough boosted mood +${moodChange}.`, "success");
       }
     } else if (stat === "insight") {
       addTrainingLog("Insight training sharpened instincts. Skill chance increased subtly.", "info");
     }
   }
 
-  function handleRetire() {
+  function handleRetireHorse(horse) {
+    if (!horse) return;
+    
     const confirmRetire = window.confirm(
-      "Retire this avatar? Their stats and skills will become a legacy bonus for the next trainee."
+      `Retire ${horse.name}? Their stats and skills will become a legacy record for future horses.`
     );
     if (!confirmRetire) return;
 
     const record = {
-      name: state.avatar.name,
-      stats: deepClone(state.avatar.stats),
-      skills: deepClone(state.avatar.skills),
+      name: horse.name,
+      stats: deepClone(horse.stats),
+      skills: deepClone(horse.skills),
       tokenId: state.tokenId,
       retiredAt: Date.now(),
-      mood: state.avatar.mood,
-      style: state.avatar.style,
-      aptitudes: deepClone(state.avatar.aptitudes || {}),
-      profile: deepClone(state.avatar.profile || {})
+      mood: horse.mood,
+      style: horse.style,
+      aptitudes: deepClone(horse.aptitudes || {}),
+      profile: deepClone(horse.profile || {})
     };
 
     state.legacyRecords = Storage.addLegacyRecord(record);
+    Storage.removeHorseFromPaddock(horse.id);
+    state.paddockHorses = Storage.loadPaddockHorses();
+    
+    if (state.selectedHorse?.id === horse.id) {
+      state.selectedHorse = state.paddockHorses[0] || null;
+      if (state.selectedHorse) {
+        state.mainHorseId = state.selectedHorse.id;
+        Storage.saveMainHorseId(state.mainHorseId);
+      }
+    }
 
-    const nextAvatar = createBaseAvatar({ legacyBonus: true, legacyData: record });
-    state.avatar = nextAvatar;
-    state.tokenId = generateTokenId();
-    state.trainingLog = [];
-    state.lastTrainedStat = null;
-
-    updateAvatarProfile();
-
-    Storage.saveCurrentAvatar(state.avatar);
-    Storage.saveTokenId(state.tokenId);
-
-    addTrainingLog("New legacy avatar created with boosted potential!", "success");
+    alert(`${horse.name} has been retired and added to the legacy records!`);
     refreshUI();
-    showScreen("menu");
+    showScreen("retired");
   }
 
   function handleReset() {
     const confirmReset = window.confirm(
-      "Reset all data? This will delete current avatar and legacy history."
+      "Reset all data? This will delete all horses, paddock data, and legacy history."
     );
     if (!confirmReset) return;
 
     Storage.resetAll();
-    state.trainingLog = [];
-    state.lastTrainedStat = null;
-    state.legacyRecords = [];
-    init();
+    location.reload();
   }
 
   function addTrainingLog(text, type = "") {
@@ -679,34 +869,21 @@
     renderTrainingLog();
   }
 
-  function adjustMood(delta) {
-    if (typeof state.avatar.mood !== "number") {
-      state.avatar.mood = 75;
-    }
-    const before = Math.round(state.avatar.mood);
-    const after = clamp(Math.round(before + delta), 0, 100);
-    state.avatar.mood = after;
-    updateMoodUI();
-    return after - before;
-  }
 
   function derivePerformanceBundle(stats) {
     return buildRacingProfile(stats).performance;
   }
 
-  function updateAvatarProfile({ persist = false } = {}) {
-    if (!state.avatar || !state.avatar.stats) return;
-    const profile = buildRacingProfile(state.avatar.stats);
-    state.avatar.profile = {
+  function updateHorseProfile(horse) {
+    if (!horse || !horse.stats) return;
+    const profile = buildRacingProfile(horse.stats);
+    horse.profile = {
       performance: { ...profile.performance },
       aptitudes: deepClone(profile.aptitudes)
     };
-    state.avatar.performance = { ...profile.performance };
-    state.avatar.aptitudes = deepClone(profile.aptitudes);
-    state.avatar.maneuverRating = profile.performance.maneuver;
-    if (persist) {
-      Storage.saveCurrentAvatar(state.avatar);
-    }
+    horse.performance = { ...profile.performance };
+    horse.aptitudes = deepClone(profile.aptitudes);
+    horse.maneuverRating = profile.performance.maneuver;
   }
 
   function applyStyleAdjustments(performance, style) {
@@ -1070,25 +1247,27 @@
   }
 
   function createRaceConfig() {
+    if (!state.selectedHorse) return null;
+    
     const seed = Date.now();
     const seedRng = createSeededRng(seed);
-    updateAvatarProfile();
+    updateHorseProfile(state.selectedHorse);
     const aiBlueprints = Array.from({ length: 3 }, (_, index) =>
-      createAIRacer(index, state.avatar.stats, seedRng)
+      createAIRacer(index, state.selectedHorse.stats, seedRng)
     ).map((blueprint) => deepClone(blueprint));
 
-    const playerProfile = state.avatar.profile || buildRacingProfile(state.avatar.stats);
+    const playerProfile = state.selectedHorse.profile || buildRacingProfile(state.selectedHorse.stats);
 
     return {
       seed,
       aiBlueprints,
       playerSnapshot: {
-        name: state.avatar.name,
-        stats: deepClone(state.avatar.stats),
-        skills: deepClone(state.avatar.skills),
-        modifiers: deepClone(state.avatar.modifiers || { trainingBonus: 0, skillChanceBonus: 0 }),
-        mood: state.avatar.mood,
-        style: state.avatar.style,
+        name: state.selectedHorse.name,
+        stats: deepClone(state.selectedHorse.stats),
+        skills: deepClone(state.selectedHorse.skills),
+        modifiers: deepClone(state.selectedHorse.modifiers || { trainingBonus: 0, skillChanceBonus: 0 }),
+        mood: state.selectedHorse.mood,
+        style: state.selectedHorse.style,
         performance: deepClone(playerProfile.performance),
         aptitudes: deepClone(playerProfile.aptitudes),
         profile: deepClone(playerProfile)
