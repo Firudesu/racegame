@@ -382,8 +382,8 @@ button.small {
   background: linear-gradient(135deg, rgba(31, 156, 230, 0.12), rgba(90, 200, 250, 0.05));
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 24px;
-  padding: 60px;
-  min-height: 380px;
+  padding: 80px;
+  min-height: 500px;
   overflow: hidden;
 }
 
@@ -429,22 +429,22 @@ button.small {
 }
 
 .map-pin.training {
-  top: 18%;
+  top: 20%;
   left: 10%;
 }
 
 .map-pin.paddock {
-  bottom: 18%;
-  left: 24%;
+  top: 20%;
+  right: 10%;
 }
 
 .map-pin.race {
-  top: 30%;
-  right: 12%;
+  bottom: 20%;
+  left: 10%;
 }
 
 .map-pin.retired {
-  bottom: 14%;
+  bottom: 20%;
   right: 10%;
 }
 

@@ -327,6 +327,14 @@
       if (elements.legacyList) {
         elements.legacyList.addEventListener("click", onLegacyAction);
       }
+
+      // Reset All Data button
+      const resetAllDataBtn = document.getElementById("reset-all-data");
+      if (resetAllDataBtn) {
+        resetAllDataBtn.addEventListener("click", () => {
+          handleReset();
+        });
+      }
     }
 
   function resizeCanvas() {
