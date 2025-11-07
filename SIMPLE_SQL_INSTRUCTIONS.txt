@@ -1,0 +1,13 @@
+=================================================================
+COPY EVERYTHING BELOW THIS LINE (ALL 221 LINES)
+=================================================================
+
+Then:
+1. Paste it into the Supabase SQL Editor text box
+2. Look for a "RUN" button (usually green, top right area)
+3. Click RUN
+4. Wait 2-3 seconds
+5. Tell me what you see
+
+=================================================================
+START COPYING FROM HERE ↓
