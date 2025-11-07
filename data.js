@@ -232,6 +232,9 @@
   }
 
   function deepClone(value) {
+    if (value === undefined || value === null) {
+      return value;
+    }
     return JSON.parse(JSON.stringify(value));
   }
 
@@ -451,6 +454,13 @@
       return { performance, aptitudes };
     }
 
+  function deriveSecondaryStats(stats, modifiers = {}, aptitudes = null) {
+    // Derive secondary stats from primary stats
+    // This is a placeholder function - returns empty object for now
+    // Can be extended later with actual secondary stat calculations
+    return {};
+  }
+
   window.ProjectStrideData = {
     TRACK_LENGTH,
     SKILL_LIBRARY,
@@ -463,6 +473,7 @@
     createAIRacer,
     derivePerformance,
     deriveAptitudes,
-    buildRacingProfile
+    buildRacingProfile,
+    deriveSecondaryStats
   };
 })();

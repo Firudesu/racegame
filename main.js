@@ -103,6 +103,14 @@
     }
   };
 
+  console.log('[INIT] Screen elements:', {
+    menuScreen: !!elements.menuScreen,
+    trainingScreen: !!elements.trainingScreen,
+    raceScreen: !!elements.raceScreen,
+    paddockScreen: !!elements.paddockScreen,
+    retiredScreen: !!elements.retiredScreen
+  });
+
   const canvas = elements.raceCanvas;
   const ctx = canvas.getContext("2d");
   let deviceRatio = window.devicePixelRatio || 1;
@@ -177,9 +185,27 @@
     Object.entries(RACING_STYLES).map(([key, def]) => [key, def.maneuverModifier || 0])
   );
 
-  init();
+  // Wait for DOM to be fully loaded before initializing
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 
   function init() {
+    // FORCE hide all non-menu screens immediately
+    const trainingScreen = document.getElementById("training-screen");
+    const raceScreen = document.getElementById("race-screen");
+    const paddockScreen = document.getElementById("paddock-screen");
+    const retiredScreen = document.getElementById("retired-screen");
+    
+    if (trainingScreen) trainingScreen.style.display = 'none';
+    if (raceScreen) raceScreen.style.display = 'none';
+    if (paddockScreen) paddockScreen.style.display = 'none';
+    if (retiredScreen) retiredScreen.style.display = 'none';
+    
+    console.log('[INIT] Forced screens to display: none');
+
     state.legacyRecords = Storage.loadLegacyRecords();
     state.avatar = Storage.loadCurrentAvatar();
     state.tokenId = Storage.loadTokenId();
@@ -318,7 +344,11 @@
       window.addEventListener("resize", () => {
         resizeCanvas();
         if (state.currentScreen === "race") {
-          drawRaceFrame();
+          if (state.race) {
+            drawRace(state.race);
+          } else {
+            drawRaceIdle();
+          }
         } else {
           drawRaceIdle();
         }
@@ -326,6 +356,14 @@
 
       if (elements.legacyList) {
         elements.legacyList.addEventListener("click", onLegacyAction);
+      }
+
+      // Reset All Data button
+      const resetAllDataBtn = document.getElementById("reset-all-data");
+      if (resetAllDataBtn) {
+        resetAllDataBtn.addEventListener("click", () => {
+          handleReset();
+        });
       }
     }
 
@@ -1413,9 +1451,22 @@
         { key: "retired", el: elements.retiredScreen }
       ];
 
+      console.log('[showScreen] Showing:', screen);
+
       screens.forEach(({ key, el }) => {
-        if (!el) return;
-        el.hidden = key !== screen;
+        if (!el) {
+          console.warn('[showScreen] Missing element for screen:', key);
+          return;
+        }
+        // Use inline styles to force hide/show - override all CSS
+        if (key === screen) {
+          el.style.display = 'flex';
+          el.hidden = false;
+        } else {
+          el.style.display = 'none';
+          el.hidden = true;
+        }
+        console.log(`[showScreen] ${key}: display =`, el.style.display);
       });
 
       switch (screen) {
@@ -1846,14 +1897,21 @@
     function updateAvatarProfile({ persist = false } = {}) {
       if (!state.avatar || !state.avatar.stats) return;
       const profile = buildRacingProfile(state.avatar.stats, state.avatar.modifiers || {});
+      
+      // Safety check - ensure profile properties exist
+      if (!profile || !profile.performance) {
+        console.error('[updateAvatarProfile] Invalid profile returned from buildRacingProfile');
+        return;
+      }
+      
       state.avatar.profile = {
         performance: { ...profile.performance },
-        aptitudes: deepClone(profile.aptitudes),
-        secondary: deepClone(profile.secondary)
+        aptitudes: profile.aptitudes ? deepClone(profile.aptitudes) : {},
+        secondary: profile.secondary ? deepClone(profile.secondary) : {}
       };
       state.avatar.performance = { ...profile.performance };
-      state.avatar.aptitudes = deepClone(profile.aptitudes);
-      state.avatar.secondary = deepClone(profile.secondary);
+      state.avatar.aptitudes = profile.aptitudes ? deepClone(profile.aptitudes) : {};
+      state.avatar.secondary = profile.secondary ? deepClone(profile.secondary) : {};
       state.avatar.maneuverRating = profile.performance.maneuver;
       if (persist) {
         Storage.saveCurrentAvatar(state.avatar);
@@ -3256,22 +3314,75 @@
     ctx.restore();
   }
 
+  // Cache for racer images to avoid reloading
+  const racerImageCache = new Map();
+
   function drawRacer(racer, width, height) {
     const pos = positionFromDistance(racer.distance, width, height, racer.zoneOffset || 0);
-    const carWidth = 28;
-    const carHeight = 12;
-    const rectX = pos.x - carWidth / 2;
-    const rectY = pos.y - carHeight / 2;
+    const avatarSize = 32;
+    const avatarX = pos.x - avatarSize / 2;
+    const avatarY = pos.y - avatarSize / 2;
 
-    ctx.fillStyle = racer.color;
-    ctx.fillRect(rectX, rectY, carWidth, carHeight);
-
-    if (racer.skills.some((skill) => skill.active)) {
-      ctx.strokeStyle = "rgba(255,255,255,0.6)";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(rectX - 2, rectY - 2, carWidth + 4, carHeight + 4);
+    // Draw avatar image if available
+    if (racer.portrait || racer.image) {
+      const imgSrc = racer.portrait || racer.image;
+      
+      if (!racerImageCache.has(imgSrc)) {
+        const img = new Image();
+        img.src = imgSrc;
+        racerImageCache.set(imgSrc, img);
+      }
+      
+      const img = racerImageCache.get(imgSrc);
+      if (img.complete && img.naturalHeight !== 0) {
+        // Draw circular clipped image
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, avatarSize / 2, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(img, avatarX, avatarY, avatarSize, avatarSize);
+        ctx.restore();
+        
+        // Draw border around avatar
+        ctx.strokeStyle = racer.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, avatarSize / 2, 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        // Fallback to colored circle while image loads
+        ctx.fillStyle = racer.color;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, avatarSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      // No image - use colored circle
+      ctx.fillStyle = racer.color;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, avatarSize / 2, 0, Math.PI * 2);
+      ctx.fill();
     }
 
+    // Draw skill glow effect if skill is active
+    if (racer.skills.some((skill) => skill.active)) {
+      ctx.strokeStyle = "rgba(255,255,255,0.8)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, (avatarSize / 2) + 3, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Add glowing shadow
+      ctx.shadowColor = racer.color;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, (avatarSize / 2) + 3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // Draw skill toast notification
     if (racer.skillToast) {
       const alpha = clamp(racer.skillToast.timer / 1.5, 0, 1);
       ctx.save();
@@ -3280,7 +3391,7 @@
       const toastWidth = 110;
       const toastHeight = 20;
       const toastX = pos.x - toastWidth / 2;
-      const toastY = rectY - 26;
+      const toastY = avatarY - 30;
       ctx.fillRect(toastX, toastY, toastWidth, toastHeight);
       ctx.strokeStyle = "rgba(90, 200, 250, 0.6)";
       ctx.lineWidth = 1;
@@ -3292,10 +3403,14 @@
       ctx.restore();
     }
 
+    // Draw racer name
     ctx.fillStyle = "#ffffff";
-    ctx.font = "11px sans-serif";
+    ctx.font = "bold 11px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(racer.name, pos.x, rectY - 6);
+    ctx.strokeStyle = "rgba(0,0,0,0.8)";
+    ctx.lineWidth = 3;
+    ctx.strokeText(racer.name, pos.x, avatarY - 8);
+    ctx.fillText(racer.name, pos.x, avatarY - 8);
   }
 
   function drawLeaderboardOverlay(race, width, height) {
