@@ -345,6 +345,10 @@ button.small {
   animation: fadeSlide 240ms ease;
 }
 
+.screen[hidden] {
+  display: none !important;
+}
+
 .screen-header {
   display: flex;
   justify-content: space-between;
