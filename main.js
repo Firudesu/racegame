@@ -185,9 +185,27 @@
     Object.entries(RACING_STYLES).map(([key, def]) => [key, def.maneuverModifier || 0])
   );
 
-  init();
+  // Wait for DOM to be fully loaded before initializing
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 
   function init() {
+    // FORCE hide all non-menu screens immediately
+    const trainingScreen = document.getElementById("training-screen");
+    const raceScreen = document.getElementById("race-screen");
+    const paddockScreen = document.getElementById("paddock-screen");
+    const retiredScreen = document.getElementById("retired-screen");
+    
+    if (trainingScreen) trainingScreen.style.display = 'none';
+    if (raceScreen) raceScreen.style.display = 'none';
+    if (paddockScreen) paddockScreen.style.display = 'none';
+    if (retiredScreen) retiredScreen.style.display = 'none';
+    
+    console.log('[INIT] Forced screens to display: none');
+
     state.legacyRecords = Storage.loadLegacyRecords();
     state.avatar = Storage.loadCurrentAvatar();
     state.tokenId = Storage.loadTokenId();
@@ -1430,21 +1448,21 @@
       ];
 
       console.log('[showScreen] Showing:', screen);
-      console.log('[showScreen] Elements found:', {
-        menu: !!elements.menuScreen,
-        training: !!elements.trainingScreen,
-        race: !!elements.raceScreen,
-        paddock: !!elements.paddockScreen,
-        retired: !!elements.retiredScreen
-      });
 
       screens.forEach(({ key, el }) => {
         if (!el) {
           console.warn('[showScreen] Missing element for screen:', key);
           return;
         }
-        el.hidden = key !== screen;
-        console.log(`[showScreen] ${key}: hidden =`, el.hidden);
+        // Use inline styles to force hide/show - override all CSS
+        if (key === screen) {
+          el.style.display = 'flex';
+          el.hidden = false;
+        } else {
+          el.style.display = 'none';
+          el.hidden = true;
+        }
+        console.log(`[showScreen] ${key}: display =`, el.style.display);
       });
 
       switch (screen) {
