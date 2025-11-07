@@ -127,28 +127,33 @@ button:disabled {
   object-fit: contain;
 }
 
+.map-pin .emoji {
+  font-size: 1.9rem;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.35));
+}
+
 .map-pin span {
   pointer-events: none;
 }
 
 .map-pin.training {
-  top: 20%;
-  left: 15%;
+  top: 18%;
+  left: 10%;
 }
 
 .map-pin.paddock {
-  bottom: 18%;
-  left: 22%;
+  bottom: 14%;
+  left: 24%;
 }
 
 .map-pin.race {
-  top: 22%;
-  right: 18%;
+  top: 26%;
+  right: 12%;
 }
 
 .map-pin.retired {
-  bottom: 18%;
-  right: 14%;
+  bottom: 12%;
+  right: 8%;
 }
 
 .map-pin:hover,

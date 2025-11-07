@@ -1,6 +1,8 @@
-const DAYJOB_PUNKS_CONTRACT = "0xa8d334c9cf7fc57eba51bf4d98bd880cb16a0de8";
+const DAYJOB_PUNKS_CONTRACT = "0xa8d334c9cf7fc57eba51bf4d98bd880cb16a0de8".toLowerCase();
 const WALLET_KEY = "horseWallet";
 const PLACEHOLDER_IMAGE = "assets/default_horse.svg";
+const RESERVOIR_API_KEY = ""; // Optional: add your Reservoir API key here
+const OPENSEA_API_KEY = ""; // Optional: add your OpenSea API key here
 
 const state = {
   wallet: null,
@@ -204,7 +206,11 @@ async function fetchNFTs(address) {
 
 async function fetchReservoirNFTs(address) {
   const url = `https://api.reservoir.tools/users/${address}/tokens/v10?contract=${DAYJOB_PUNKS_CONTRACT}&limit=8`;
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  const headers = { Accept: "application/json" };
+  if (RESERVOIR_API_KEY) {
+    headers["x-api-key"] = RESERVOIR_API_KEY;
+  }
+  const response = await fetch(url, { headers });
   if (!response.ok) {
     throw new Error("Reservoir request failed");
   }
@@ -230,7 +236,11 @@ async function fetchReservoirNFTs(address) {
 
 async function fetchOpenSeaNFTs(address) {
   const url = `https://api.opensea.io/api/v2/chain/ethereum/account/${address}/nfts?limit=30&contract_address=${DAYJOB_PUNKS_CONTRACT}`;
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  const headers = { Accept: "application/json" };
+  if (OPENSEA_API_KEY) {
+    headers["x-api-key"] = OPENSEA_API_KEY;
+  }
+  const response = await fetch(url, { headers });
   if (!response.ok) {
     throw new Error("OpenSea request failed");
   }
