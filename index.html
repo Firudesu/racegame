@@ -3,149 +3,151 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Horse Game Demo</title>
+  <title>Project Stride – Demo</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="top-bar">
-    <div class="brand">
-      <h1>Horse Trainer Demo</h1>
-      <p>Connect your wallet or create stable horses for testing.</p>
-    </div>
-    <div class="wallet-controls">
-      <span id="walletInfo" class="wallet-status">Wallet not connected</span>
-      <button id="connectButton">Connect MetaMask</button>
-    </div>
-  </header>
+  <div id="app">
+    <header class="top-bar">
+      <h1>Project Stride</h1>
+      <div class="token-info">Token: <span id="token-id">--</span></div>
+    </header>
 
-  <main class="layout">
-    <section class="map-board">
-      <div class="map-overlay"></div>
-      <button class="map-pin training" data-target="training">
-        <span class="emoji">🏋️‍♂️</span>
-        <span>Training Grounds</span>
-      </button>
-      <button class="map-pin paddock" data-target="paddock">
-        <span class="emoji">🐴</span>
-        <span>Paddock</span>
-      </button>
-      <button class="map-pin race" data-target="race">
-        <span class="emoji">🏁</span>
-        <span>Race Track</span>
-      </button>
-      <button class="map-pin retired" data-target="retired">
-        <span class="emoji">🌳</span>
-        <span>Retired Stable</span>
-      </button>
-    </section>
+    <main class="layout">
+        <aside class="sidebar">
+          <section class="avatar-info">
+            <h2>Avatar</h2>
+            <div class="avatar-name" id="avatar-name">--</div>
+            <div class="avatar-sessions">Sessions: <span id="avatar-sessions">0</span></div>
+            <div class="avatar-style">Style: <span id="avatar-style">--</span></div>
+            <div class="legacy-flag" id="legacy-flag"></div>
+          </section>
 
-    <div class="panel-stack">
-      <section class="panel active" id="panel-info">
-        <h2>Welcome to the Horse Trainer Demo</h2>
-        <p>
-          Use the map to jump between activities. Connect MetaMask to pull in your Dayjob Punks NFTs
-          and use their artwork as horse avatars. No NFTs? Create stable horses and keep training.
-        </p>
-        <ul>
-          <li><strong>Training Grounds:</strong> Run focused drills and build stats.</li>
-          <li><strong>Paddock:</strong> Import NFTs or create up to four active horses.</li>
-          <li><strong>Race Track:</strong> Select a horse and try a quick 2D race.</li>
-          <li><strong>Retired Stable:</strong> View legacy horses you retire from racing.</li>
-        </ul>
-      </section>
-
-      <section class="panel hidden" id="panel-training">
-        <div class="panel-heading">
-          <div>
-            <h2>Training Grounds</h2>
-            <p>Pick a focus area to boost the selected horse. Results apply instantly.</p>
-          </div>
-          <div class="current-horse" id="trainingHorseCard">
-            <img src="assets/default_horse.svg" alt="" />
-            <div>
-              <h3 id="trainingHorseName">No horse selected</h3>
-              <p id="trainingHorseStats">Select a horse in the paddock first.</p>
+          <section class="stats">
+            <h2>Stats</h2>
+          <div class="stat" data-stat="stride">
+            <span>Stride</span>
+            <div class="stat-bar">
+              <div class="bar" id="stat-stride"></div>
+              <span class="value" id="stat-stride-value">0</span>
             </div>
           </div>
-        </div>
-        <div class="training-options">
-          <button data-train="stride">
-            Stride<span>Improve launch speed</span>
-          </button>
-          <button data-train="endurance">
-            Endurance<span>Longer sustained runs</span>
-          </button>
-          <button data-train="force">
-            Force<span>More push during sprints</span>
-          </button>
-          <button data-train="resolve">
-            Resolve<span>Finish-line mentality</span>
-          </button>
-          <button data-train="insight">
-            Insight<span>Smarter race decisions</span>
-          </button>
-        </div>
-        <div class="training-log">
-          <h3>Recent Sessions</h3>
-          <ul id="trainingLog"></ul>
-        </div>
-      </section>
-
-      <section class="panel hidden" id="panel-paddock">
-        <div class="panel-heading">
-          <div>
-            <h2>Paddock</h2>
-            <p id="paddockMessage">
-              Connect MetaMask to import Dayjob Punks NFTs. If none are found, you can create horses for testing.
-            </p>
-          </div>
-          <div class="panel-actions">
-            <button id="createHorseBtn">Create Horse</button>
-            <button id="importHorseBtn">Import NFT</button>
-          </div>
-        </div>
-        <div class="paddock" id="paddock">
-          <div class="slot" data-index="0"></div>
-          <div class="slot" data-index="1"></div>
-          <div class="slot" data-index="2"></div>
-          <div class="slot" data-index="3"></div>
-        </div>
-      </section>
-
-      <section class="panel hidden" id="panel-race">
-        <div class="panel-heading">
-          <div>
-            <h2>Race Track</h2>
-            <p>Choose your runner and tap <em>Start Race</em> to compete against AI rivals.</p>
-          </div>
-          <div class="current-horse" id="raceHorseCard">
-            <img src="assets/default_horse.svg" alt="" />
-            <div>
-              <h3 id="raceHorseName">No horse selected</h3>
-              <p id="raceHorseStats">Pick a horse from the paddock to race.</p>
+          <div class="stat" data-stat="endurance">
+            <span>Endurance</span>
+            <div class="stat-bar">
+              <div class="bar" id="stat-endurance"></div>
+              <span class="value" id="stat-endurance-value">0</span>
             </div>
           </div>
-        </div>
-        <canvas id="raceCanvas" width="560" height="240"></canvas>
-        <div class="race-controls">
-          <button id="startRaceBtn">Start Race</button>
-          <div id="raceStatus" class="race-status">Awaiting race selection…</div>
-        </div>
-      </section>
+          <div class="stat" data-stat="force">
+            <span>Force</span>
+            <div class="stat-bar">
+              <div class="bar" id="stat-force"></div>
+              <span class="value" id="stat-force-value">0</span>
+            </div>
+          </div>
+          <div class="stat" data-stat="resolve">
+            <span>Resolve</span>
+            <div class="stat-bar">
+              <div class="bar" id="stat-resolve"></div>
+              <span class="value" id="stat-resolve-value">0</span>
+            </div>
+          </div>
+          <div class="stat" data-stat="insight">
+            <span>Insight</span>
+            <div class="stat-bar">
+              <div class="bar" id="stat-insight"></div>
+              <span class="value" id="stat-insight-value">0</span>
+            </div>
+          </div>
+            <div class="stat" data-stat="mood">
+              <span>Mood</span>
+              <div class="stat-bar">
+                <div class="bar" id="stat-mood"></div>
+                <span class="value" id="stat-mood-value">0</span>
+              </div>
+            </div>
+        </section>
 
-      <section class="panel hidden" id="panel-retired">
-        <h2>Retired Stable</h2>
-        <p>Retire horses from the paddock to archive them here with their stats and artwork.</p>
-        <div id="retiredList" class="retired-list empty">No retired horses yet.</div>
+        <section class="skills">
+          <h2>Skills</h2>
+          <ul id="skill-list"></ul>
+        </section>
+
+        <section class="legacy">
+          <h2>Legacy Gallery</h2>
+          <div class="legacy-list-wrapper">
+            <ul id="legacy-list" class="legacy-list"></ul>
+            <div class="legacy-empty" id="legacy-empty">No legacy champions yet.</div>
+          </div>
+        </section>
+      </aside>
+
+      <section class="content">
+        <div class="menu" id="menu-screen">
+          <h2>Main Menu</h2>
+          <p>Select an action for your avatar.</p>
+          <div class="menu-buttons">
+            <button data-action="train" class="primary">Train</button>
+            <button data-action="race" class="primary">Race</button>
+            <button data-action="retire">Retire</button>
+            <button data-action="reset" class="danger">Reset</button>
+          </div>
+        </div>
+
+        <div class="training" id="training-screen" hidden>
+          <h2>Training Session</h2>
+          <p>Select a stat to focus on this session.</p>
+          <div class="training-buttons">
+            <button data-train="stride">Stride</button>
+            <button data-train="endurance">Endurance</button>
+            <button data-train="force">Force</button>
+            <button data-train="resolve">Resolve</button>
+            <button data-train="insight">Insight</button>
+          </div>
+          <div class="training-log" id="training-log"></div>
+          <button id="back-to-menu" class="secondary">Back to Menu</button>
+        </div>
+
+        <div class="race" id="race-screen" hidden>
+          <div class="race-header">
+            <h2>Stride Derby</h2>
+            <div class="hud">
+              <div>Phase: <span id="hud-phase">--</span></div>
+              <div>Timer: <span id="hud-timer">0.0</span>s</div>
+              <div>Rank: <span id="hud-rank">--</span></div>
+              <div class="energy-bar">
+                <span>Stamina</span>
+                <div class="bar">
+                  <div class="fill" id="hud-energy"></div>
+                </div>
+              </div>
+              <div class="hud-skills" id="hud-skills"></div>
+            </div>
+          </div>
+          <canvas id="race-canvas" width="900" height="500"></canvas>
+          <div class="race-controls">
+            <button id="start-race" class="primary">Start Race</button>
+            <button id="race-back" class="secondary">Back to Menu</button>
+          </div>
+        </div>
       </section>
+    </main>
+  </div>
+
+  <div class="modal" id="results-modal" hidden>
+    <div class="modal-content">
+      <h2>Race Results</h2>
+      <div id="results-body"></div>
+      <div class="modal-actions">
+        <button id="results-back" class="primary">Back to Menu</button>
+        <button id="results-replay" class="secondary">Replay Race</button>
+      </div>
     </div>
-  </main>
+  </div>
 
-  <footer class="app-footer">
-    Data stored locally in your browser. Dayjob Punks contract:
-    <span>0xa8d334c9cf7fc57eba51bf4d98bd880cb16a0de8</span>
-  </footer>
-
-  <script src="script.js"></script>
+  <script src="data.js"></script>
+  <script src="storage.js"></script>
+  <script src="main.js"></script>
 </body>
 </html>
