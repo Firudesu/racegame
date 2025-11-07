@@ -411,6 +411,8 @@ button.small {
   backdrop-filter: blur(6px);
   min-width: 200px;
   text-align: left;
+  z-index: 10;
+  cursor: pointer;
 }
 
 .map-pin .emoji {
