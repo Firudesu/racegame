@@ -3314,22 +3314,75 @@
     ctx.restore();
   }
 
+  // Cache for racer images to avoid reloading
+  const racerImageCache = new Map();
+
   function drawRacer(racer, width, height) {
     const pos = positionFromDistance(racer.distance, width, height, racer.zoneOffset || 0);
-    const carWidth = 28;
-    const carHeight = 12;
-    const rectX = pos.x - carWidth / 2;
-    const rectY = pos.y - carHeight / 2;
+    const avatarSize = 32;
+    const avatarX = pos.x - avatarSize / 2;
+    const avatarY = pos.y - avatarSize / 2;
 
-    ctx.fillStyle = racer.color;
-    ctx.fillRect(rectX, rectY, carWidth, carHeight);
-
-    if (racer.skills.some((skill) => skill.active)) {
-      ctx.strokeStyle = "rgba(255,255,255,0.6)";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(rectX - 2, rectY - 2, carWidth + 4, carHeight + 4);
+    // Draw avatar image if available
+    if (racer.portrait || racer.image) {
+      const imgSrc = racer.portrait || racer.image;
+      
+      if (!racerImageCache.has(imgSrc)) {
+        const img = new Image();
+        img.src = imgSrc;
+        racerImageCache.set(imgSrc, img);
+      }
+      
+      const img = racerImageCache.get(imgSrc);
+      if (img.complete && img.naturalHeight !== 0) {
+        // Draw circular clipped image
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, avatarSize / 2, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(img, avatarX, avatarY, avatarSize, avatarSize);
+        ctx.restore();
+        
+        // Draw border around avatar
+        ctx.strokeStyle = racer.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, avatarSize / 2, 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        // Fallback to colored circle while image loads
+        ctx.fillStyle = racer.color;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, avatarSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      // No image - use colored circle
+      ctx.fillStyle = racer.color;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, avatarSize / 2, 0, Math.PI * 2);
+      ctx.fill();
     }
 
+    // Draw skill glow effect if skill is active
+    if (racer.skills.some((skill) => skill.active)) {
+      ctx.strokeStyle = "rgba(255,255,255,0.8)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, (avatarSize / 2) + 3, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Add glowing shadow
+      ctx.shadowColor = racer.color;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, (avatarSize / 2) + 3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // Draw skill toast notification
     if (racer.skillToast) {
       const alpha = clamp(racer.skillToast.timer / 1.5, 0, 1);
       ctx.save();
@@ -3338,7 +3391,7 @@
       const toastWidth = 110;
       const toastHeight = 20;
       const toastX = pos.x - toastWidth / 2;
-      const toastY = rectY - 26;
+      const toastY = avatarY - 30;
       ctx.fillRect(toastX, toastY, toastWidth, toastHeight);
       ctx.strokeStyle = "rgba(90, 200, 250, 0.6)";
       ctx.lineWidth = 1;
@@ -3350,10 +3403,14 @@
       ctx.restore();
     }
 
+    // Draw racer name
     ctx.fillStyle = "#ffffff";
-    ctx.font = "11px sans-serif";
+    ctx.font = "bold 11px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(racer.name, pos.x, rectY - 6);
+    ctx.strokeStyle = "rgba(0,0,0,0.8)";
+    ctx.lineWidth = 3;
+    ctx.strokeText(racer.name, pos.x, avatarY - 8);
+    ctx.fillText(racer.name, pos.x, avatarY - 8);
   }
 
   function drawLeaderboardOverlay(race, width, height) {

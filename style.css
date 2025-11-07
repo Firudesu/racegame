@@ -1,14 +1,17 @@
 :root {
   color-scheme: light;
   font-family: "Segoe UI", sans-serif;
-  --bg: #0e1017;
+  --bg: #0a0e1a;
   --panel: #171b26;
-  --accent: #5ac8fa;
-  --accent-strong: #1f9ce6;
-  --danger: #f85149;
+  --accent: #00d4ff;
+  --accent-strong: #0096ff;
+  --danger: #ff4757;
   --text: #f5f7ff;
   --muted: #8c92a1;
-  --success: #58d68d;
+  --success: #2ecc71;
+  --purple: #a742ff;
+  --orange: #ff9f43;
+  --yellow: #ffd93d;
 }
 
 * {
@@ -17,7 +20,8 @@
 
 body {
   margin: 0;
-  background: radial-gradient(circle at top, #1a2233, var(--bg));
+  background: linear-gradient(135deg, #0a0e1a 0%, #1a1f3a 50%, #0f1425 100%);
+  background-attachment: fixed;
   color: var(--text);
   min-height: 100vh;
   display: flex;
@@ -42,8 +46,9 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 18px 28px;
-  background: linear-gradient(90deg, rgba(90, 200, 250, 0.12), transparent);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(90deg, rgba(0, 212, 255, 0.15), rgba(167, 66, 255, 0.1));
+  border-bottom: 2px solid rgba(0, 212, 255, 0.3);
+  box-shadow: 0 4px 20px rgba(0, 212, 255, 0.1);
 }
 
 .top-bar h1 {
@@ -262,19 +267,25 @@ body {
 }
 
 button {
-  background: rgba(90, 200, 250, 0.15);
-  border: 1px solid rgba(90, 200, 250, 0.35);
+  background: rgba(0, 212, 255, 0.15);
+  border: 2px solid rgba(0, 212, 255, 0.4);
   color: var(--text);
   padding: 12px 18px;
   border-radius: 12px;
   font-size: 1rem;
   cursor: pointer;
-  transition: transform 0.1s ease, background 0.2s ease;
+  transition: all 0.2s ease;
+  font-weight: 600;
 }
 
 button:hover {
-  transform: translateY(-1px);
-  background: rgba(90, 200, 250, 0.25);
+  transform: translateY(-2px);
+  background: rgba(0, 212, 255, 0.3);
+  box-shadow: 0 6px 20px rgba(0, 212, 255, 0.4);
+}
+
+button:active {
+  transform: translateY(0px);
 }
 
 button:disabled {
@@ -283,18 +294,34 @@ button:disabled {
 }
 
 button.primary {
-  background: linear-gradient(135deg, rgba(90, 200, 250, 0.8), rgba(31, 156, 230, 0.8));
-  border: 1px solid rgba(90, 200, 250, 0.4);
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.9), rgba(0, 150, 255, 0.9));
+  border: 2px solid rgba(0, 212, 255, 0.6);
+  box-shadow: 0 4px 16px rgba(0, 212, 255, 0.3);
+}
+
+button.primary:hover {
+  background: linear-gradient(135deg, rgba(0, 212, 255, 1), rgba(0, 150, 255, 1));
+  box-shadow: 0 8px 24px rgba(0, 212, 255, 0.5);
 }
 
 button.secondary {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+button.secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.2);
 }
 
 button.danger {
-  background: rgba(248, 81, 73, 0.18);
-  border: 1px solid rgba(248, 81, 73, 0.35);
+  background: rgba(255, 71, 87, 0.2);
+  border: 2px solid rgba(255, 71, 87, 0.5);
+}
+
+button.danger:hover {
+  background: rgba(255, 71, 87, 0.3);
+  box-shadow: 0 6px 20px rgba(255, 71, 87, 0.4);
 }
 
 .top-bar-right {
@@ -383,12 +410,13 @@ button.small {
 
 .map-board {
   position: relative;
-  background: linear-gradient(135deg, rgba(31, 156, 230, 0.12), rgba(90, 200, 250, 0.05));
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(167, 66, 255, 0.12), rgba(255, 159, 67, 0.08));
+  border: 2px solid rgba(0, 212, 255, 0.3);
   border-radius: 24px;
   padding: 80px;
   min-height: 500px;
   overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 212, 255, 0.2), inset 0 0 100px rgba(0, 212, 255, 0.05);
 }
 
 .map-overlay {
@@ -404,19 +432,20 @@ button.small {
   position: absolute;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 22px;
+  gap: 14px;
+  padding: 18px 24px;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(14, 16, 23, 0.85);
+  border: 2px solid rgba(0, 212, 255, 0.4);
+  background: linear-gradient(135deg, rgba(14, 16, 23, 0.95), rgba(20, 24, 35, 0.9));
   color: var(--text);
   font-weight: 600;
-  box-shadow: 0 18px 30px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(6px);
-  min-width: 200px;
+  box-shadow: 0 8px 32px rgba(0, 212, 255, 0.3), 0 4px 16px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  min-width: 220px;
   text-align: left;
   z-index: 10;
   cursor: pointer;
+  transition: all 0.3s ease;
 }
 
 .map-pin .emoji {
@@ -435,27 +464,66 @@ button.small {
 }
 
 .map-pin.training {
-  top: 20%;
-  left: 10%;
+  top: 10%;
+  left: 5%;
 }
 
 .map-pin.paddock {
-  top: 20%;
-  right: 10%;
+  top: 10%;
+  right: 5%;
 }
 
 .map-pin.race {
-  bottom: 20%;
-  left: 10%;
+  bottom: 10%;
+  left: 5%;
 }
 
 .map-pin.retired {
-  bottom: 20%;
-  right: 10%;
+  bottom: 10%;
+  right: 5%;
 }
 
 .map-pin:hover {
-  border-color: rgba(90, 200, 250, 0.7);
+  border-color: rgba(0, 212, 255, 1);
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 12px 48px rgba(0, 212, 255, 0.5), 0 6px 24px rgba(167, 66, 255, 0.3);
+  background: linear-gradient(135deg, rgba(14, 16, 23, 1), rgba(20, 24, 35, 0.95));
+}
+
+.map-pin.training {
+  border-color: rgba(255, 159, 67, 0.6);
+}
+
+.map-pin.training:hover {
+  border-color: rgba(255, 159, 67, 1);
+  box-shadow: 0 12px 48px rgba(255, 159, 67, 0.5);
+}
+
+.map-pin.paddock {
+  border-color: rgba(46, 204, 113, 0.6);
+}
+
+.map-pin.paddock:hover {
+  border-color: rgba(46, 204, 113, 1);
+  box-shadow: 0 12px 48px rgba(46, 204, 113, 0.5);
+}
+
+.map-pin.race {
+  border-color: rgba(255, 71, 87, 0.6);
+}
+
+.map-pin.race:hover {
+  border-color: rgba(255, 71, 87, 1);
+  box-shadow: 0 12px 48px rgba(255, 71, 87, 0.5);
+}
+
+.map-pin.retired {
+  border-color: rgba(167, 66, 255, 0.6);
+}
+
+.map-pin.retired:hover {
+  border-color: rgba(167, 66, 255, 1);
+  box-shadow: 0 12px 48px rgba(167, 66, 255, 0.5);
 }
 
 .avatar-portrait {
