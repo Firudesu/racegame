@@ -103,6 +103,14 @@
     }
   };
 
+  console.log('[INIT] Screen elements:', {
+    menuScreen: !!elements.menuScreen,
+    trainingScreen: !!elements.trainingScreen,
+    raceScreen: !!elements.raceScreen,
+    paddockScreen: !!elements.paddockScreen,
+    retiredScreen: !!elements.retiredScreen
+  });
+
   const canvas = elements.raceCanvas;
   const ctx = canvas.getContext("2d");
   let deviceRatio = window.devicePixelRatio || 1;
@@ -1421,9 +1429,22 @@
         { key: "retired", el: elements.retiredScreen }
       ];
 
+      console.log('[showScreen] Showing:', screen);
+      console.log('[showScreen] Elements found:', {
+        menu: !!elements.menuScreen,
+        training: !!elements.trainingScreen,
+        race: !!elements.raceScreen,
+        paddock: !!elements.paddockScreen,
+        retired: !!elements.retiredScreen
+      });
+
       screens.forEach(({ key, el }) => {
-        if (!el) return;
+        if (!el) {
+          console.warn('[showScreen] Missing element for screen:', key);
+          return;
+        }
         el.hidden = key !== screen;
+        console.log(`[showScreen] ${key}: hidden =`, el.hidden);
       });
 
       switch (screen) {
