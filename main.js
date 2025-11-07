@@ -18,40 +18,63 @@
       deriveSecondaryStats
     } = Data;
 
-  const elements = {
-    tokenId: document.getElementById("token-id"),
-    avatarName: document.getElementById("avatar-name"),
-    sessions: document.getElementById("avatar-sessions"),
-    avatarStyle: document.getElementById("avatar-style"),
-    legacyFlag: document.getElementById("legacy-flag"),
-    skillList: document.getElementById("skill-list"),
-    legacyList: document.getElementById("legacy-list"),
-    legacyEmpty: document.getElementById("legacy-empty"),
-    trainingLog: document.getElementById("training-log"),
-    hudPhase: document.getElementById("hud-phase"),
-    hudTimer: document.getElementById("hud-timer"),
-    hudRank: document.getElementById("hud-rank"),
-    hudEnergy: document.getElementById("hud-energy"),
-    hudSkills: document.getElementById("hud-skills"),
-    menuScreen: document.getElementById("menu-screen"),
-    trainingScreen: document.getElementById("training-screen"),
-    raceScreen: document.getElementById("race-screen"),
-    backToMenu: document.getElementById("back-to-menu"),
-    raceBack: document.getElementById("race-back"),
-    startRace: document.getElementById("start-race"),
-    resultsModal: document.getElementById("results-modal"),
-    resultsBody: document.getElementById("results-body"),
-    resultsBack: document.getElementById("results-back"),
-    resultsReplay: document.getElementById("results-replay"),
-    menuButtons: document.querySelectorAll(".menu-buttons button"),
-    trainingButtons: document.querySelectorAll(".training-buttons button"),
-    raceCanvas: document.getElementById("race-canvas"),
-    menuRoot: document.getElementById("menu-screen"),
-    retireButton: document.querySelector('button[data-action="retire"]'),
-    trainButton: document.querySelector('button[data-action="train"]'),
-    raceButton: document.querySelector('button[data-action="race"]'),
-    resetButton: document.querySelector('button[data-action="reset"]')
-  };
+    const DAYJOB_PUNKS_CONTRACT = "0xa8d334c9cf7fc57eba51bf4d98bd880cb16a0de8";
+    const WALLET_STORAGE_KEY = "projectStrideWallet";
+    const ROSTER_STORAGE_PREFIX = "playerData";
+    const ACTIVE_STORAGE_PREFIX = "projectStrideActive";
+    const RESERVOIR_API_KEY = "";
+    const OPENSEA_API_KEY = "fb2b196277d540ae95283e91d5f4d276";
+    const PLACEHOLDER_IMAGE = "assets/default_horse.svg";
+
+    const elements = {
+      tokenId: document.getElementById("token-id"),
+      avatarName: document.getElementById("avatar-name"),
+      sessions: document.getElementById("avatar-sessions"),
+      avatarStyle: document.getElementById("avatar-style"),
+      legacyFlag: document.getElementById("legacy-flag"),
+      skillList: document.getElementById("skill-list"),
+      legacyList: document.getElementById("legacy-list"),
+      legacyEmpty: document.getElementById("legacy-empty"),
+      trainingLog: document.getElementById("training-log"),
+      hudPhase: document.getElementById("hud-phase"),
+      hudTimer: document.getElementById("hud-timer"),
+      hudRank: document.getElementById("hud-rank"),
+      hudEnergy: document.getElementById("hud-energy"),
+      hudSkills: document.getElementById("hud-skills"),
+      menuScreen: document.getElementById("menu-screen"),
+      trainingScreen: document.getElementById("training-screen"),
+      raceScreen: document.getElementById("race-screen"),
+      paddockScreen: document.getElementById("paddock-screen"),
+      retiredScreen: document.getElementById("retired-screen"),
+      paddockGrid: document.getElementById("paddock-grid"),
+      paddockMessage: document.getElementById("paddockMessage"),
+      paddockContextMenu: document.getElementById("paddock-context-menu"),
+      retiredList: document.getElementById("retiredList"),
+      avatarPortrait: document.getElementById("avatar-portrait"),
+      sessionsLeft: document.getElementById("sessions-left"),
+      trainingTimer: document.getElementById("training-timer"),
+      walletStatus: document.getElementById("wallet-status"),
+      walletConnect: document.getElementById("wallet-connect"),
+      createHorseBtn: document.getElementById("createHorseBtn"),
+      importHorseBtn: document.getElementById("importHorseBtn"),
+      mapPins: document.querySelectorAll(".map-pin"),
+      returnButtons: document.querySelectorAll("[data-return]"),
+      backToMenu: document.getElementById("back-to-menu"),
+      raceBack: document.getElementById("race-back"),
+      startRace: document.getElementById("start-race"),
+      resultsModal: document.getElementById("results-modal"),
+      resultsBody: document.getElementById("results-body"),
+      resultsBack: document.getElementById("results-back"),
+      resultsReplay: document.getElementById("results-replay"),
+      menuButtons: document.querySelectorAll(".menu-buttons button"),
+      trainingButtons: document.querySelectorAll(".training-buttons button"),
+      raceCanvas: document.getElementById("race-canvas"),
+      menuRoot: document.getElementById("menu-screen"),
+      retireButton: document.querySelector('button[data-action="retire"]'),
+      trainButton: document.querySelector('button[data-action="train"]'),
+      raceButton: document.querySelector('button[data-action="race"]'),
+      resetButton: document.querySelector('button[data-action="reset"]')
+    };
 
   const statBars = {
     stride: {
@@ -86,16 +109,34 @@
   let eventsBound = false;
   resizeCanvas();
 
-  const state = {
-    avatar: null,
-    tokenId: null,
-    legacyRecords: [],
-    trainingLog: [],
-    lastTrainedStat: null,
-    currentScreen: "menu",
-    race: null,
-    lastRaceConfig: null
-  };
+    const state = {
+      avatar: null,
+      tokenId: null,
+      legacyRecords: [],
+      trainingLog: [],
+      lastTrainedStat: null,
+      currentScreen: "menu",
+      race: null,
+      lastRaceConfig: null
+    };
+
+    const walletState = {
+      address: null,
+      roster: [],
+      selectedId: null,
+      availableNFTs: [],
+      lastFetch: 0
+    };
+
+    const trainingSession = {
+      active: false,
+      countdown: 0,
+      timerId: null,
+      intervalId: null,
+      pendingStat: null
+    };
+
+    let contextMenuEntryId = null;
 
   const Sfx = createSfx();
 
@@ -159,59 +200,134 @@
       Storage.saveTokenId(state.tokenId);
     }
 
-    bindEvents();
+      initializeWalletState();
+      bindEvents();
     refreshUI();
+      renderPaddockRoster();
+      renderRetiredStable();
     showScreen("menu");
     drawRaceIdle();
   }
 
-  function bindEvents() {
-    if (eventsBound) return;
-    eventsBound = true;
+    function bindEvents() {
+      if (eventsBound) return;
+      eventsBound = true;
 
-    elements.menuButtons.forEach((button) => {
-      button.addEventListener("click", onMenuAction);
-    });
-
-    elements.trainingButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        const stat = button.dataset.train;
-        handleTrain(stat);
+      elements.menuButtons.forEach((button) => {
+        button.addEventListener("click", onMenuAction);
       });
-    });
 
-    elements.backToMenu.addEventListener("click", () => {
-      showScreen("menu");
-    });
+      elements.trainingButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const stat = button.dataset.train;
+          if (stat) {
+            beginTrainingSession(stat);
+          }
+        });
+      });
 
-    elements.raceBack.addEventListener("click", () => {
-      stopRace();
-      showScreen("menu");
-    });
-
-    elements.startRace.addEventListener("click", () => {
-      startRace(false);
-    });
-
-    elements.resultsBack.addEventListener("click", () => {
-      hideResults();
-      showScreen("menu");
-    });
-
-    elements.resultsReplay.addEventListener("click", () => {
-      hideResults();
-      if (state.lastRaceConfig) {
-        showScreen("race");
-        startRace(true);
+      if (elements.mapPins) {
+        elements.mapPins.forEach((pin) => {
+          pin.addEventListener("click", () => {
+            const target = pin.dataset.target;
+            if (target) {
+              navigateScreen(target);
+            }
+          });
+        });
       }
-    });
 
-    window.addEventListener("resize", resizeCanvas);
+      if (elements.returnButtons) {
+        elements.returnButtons.forEach((button) => {
+          if (button.id === "race-back") return;
+          button.addEventListener("click", () => {
+            navigateScreen("menu");
+          });
+        });
+      }
 
-    if (elements.legacyList) {
-      elements.legacyList.addEventListener("click", onLegacyAction);
+      if (elements.backToMenu) {
+        elements.backToMenu.addEventListener("click", () => {
+          navigateScreen("menu");
+        });
+      }
+
+      if (elements.raceBack) {
+        elements.raceBack.addEventListener("click", () => {
+          stopRace();
+          navigateScreen("menu");
+        });
+      }
+
+      if (elements.startRace) {
+        elements.startRace.addEventListener("click", () => {
+          startRace(false);
+        });
+      }
+
+      if (elements.resultsBack) {
+        elements.resultsBack.addEventListener("click", () => {
+          hideResults();
+          navigateScreen("menu");
+        });
+      }
+
+      if (elements.resultsReplay) {
+        elements.resultsReplay.addEventListener("click", () => {
+          hideResults();
+          if (state.lastRaceConfig) {
+            navigateScreen("race");
+            startRace(true);
+          }
+        });
+      }
+
+      if (elements.walletConnect) {
+        elements.walletConnect.addEventListener("click", connectWalletFlow);
+      }
+
+      if (elements.createHorseBtn) {
+        elements.createHorseBtn.addEventListener("click", () => {
+          createStableHorse();
+        });
+      }
+
+      if (elements.importHorseBtn) {
+        elements.importHorseBtn.addEventListener("click", () => {
+          openNFTImport();
+        });
+      }
+
+      if (elements.paddockContextMenu) {
+        elements.paddockContextMenu.addEventListener("click", onPaddockContextAction);
+      }
+
+      document.addEventListener("click", hidePaddockContextMenu);
+      window.addEventListener("scroll", hidePaddockContextMenu, true);
+      document.addEventListener("contextmenu", (event) => {
+        if (!event.target.closest(".paddock-grid .slot")) {
+          hidePaddockContextMenu();
+        }
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          hidePaddockContextMenu();
+        }
+      });
+
+      window.addEventListener("resize", () => {
+        resizeCanvas();
+        if (state.currentScreen === "race") {
+          drawRaceFrame();
+        } else {
+          drawRaceIdle();
+        }
+      });
+
+      if (elements.legacyList) {
+        elements.legacyList.addEventListener("click", onLegacyAction);
+      }
     }
-  }
 
   function resizeCanvas() {
     const ratio = window.devicePixelRatio || 1;
@@ -234,10 +350,15 @@
     elements.tokenId.textContent = state.tokenId;
     elements.avatarName.textContent = state.avatar.name;
     elements.sessions.textContent = state.avatar.sessions;
+      updateTrainingStatusUI();
     if (elements.avatarStyle) {
       elements.avatarStyle.textContent = state.avatar.style;
     }
     elements.legacyFlag.textContent = state.avatar.legacy ? "Legacy boosted" : "";
+      if (elements.avatarPortrait) {
+        const portrait = state.avatar.portrait || state.avatar.image || PLACEHOLDER_IMAGE;
+        elements.avatarPortrait.src = portrait || PLACEHOLDER_IMAGE;
+      }
 
     Object.entries(state.avatar.stats).forEach(([stat, value]) => {
       const bar = statBars[stat];
@@ -248,10 +369,11 @@
 
     updateMoodUI();
 
-    renderSkills();
-    renderLegacyGallery();
-    updateMenuState();
-    renderTrainingLog();
+      renderSkills();
+      renderLegacyGallery();
+      renderRetiredStable();
+      updateMenuState();
+      renderTrainingLog();
   }
 
   function ensureAvatarSchema() {
@@ -383,9 +505,798 @@
 
       list.appendChild(li);
     });
-  }
+    }
 
-  function onLegacyAction(event) {
+    function renderRetiredStable() {
+      const container = elements.retiredList;
+      if (!container) return;
+
+      container.innerHTML = "";
+      if (!state.legacyRecords.length) {
+        container.classList.add("empty");
+        container.textContent = "No retired horses yet.";
+        return;
+      }
+
+      container.classList.remove("empty");
+
+      state.legacyRecords.forEach((record) => {
+        const card = document.createElement("div");
+        card.className = "retired-card";
+
+        const image = normalizeImageUrl(record.image || record.portrait) || PLACEHOLDER_IMAGE;
+        const retiredAt = record.retiredAt ? new Date(record.retiredAt).toLocaleDateString() : "";
+        const statsSummary = record.stats
+          ? `Stride ${record.stats.stride} • Endurance ${record.stats.endurance} • Force ${record.stats.force}`
+          : "";
+
+        card.innerHTML = `
+          <header>
+            <img src="${image}" alt="${record.name}" />
+            <div>
+              <strong>${record.name}</strong>
+              <div class="meta">${retiredAt}</div>
+            </div>
+          </header>
+          <div class="meta">Token: ${record.tokenId || "—"} • Style: ${record.style || "Pacer"}</div>
+          <div class="meta">${statsSummary}</div>
+          <button class="secondary" type="button" data-action="legacy-attach" data-id="${record.id || ""}">Attach to Horse</button>
+        `;
+
+        const button = card.querySelector('button[data-action="legacy-attach"]');
+        if (button) {
+          button.addEventListener("click", () => {
+            window.alert("Legacy attachment will be available in a future update.");
+          });
+        }
+
+        container.appendChild(card);
+      });
+    }
+
+    function initializeWalletState() {
+      const stored = loadStoredWallet();
+      if (stored) {
+        walletState.address = stored.toLowerCase();
+        walletState.roster = loadRoster(walletState.address);
+        let activeId = loadActiveHorseId(walletState.address);
+
+        if (!walletState.roster.length) {
+          const entry = createRosterEntryFromAvatar(state.avatar, {
+            tokenId: state.tokenId,
+            image: state.avatar.portrait || state.avatar.image,
+            collection: "Stable"
+          });
+          walletState.roster.push(entry);
+          walletState.selectedId = entry.id;
+          saveRoster();
+          saveActiveHorseId(walletState.address, entry.id);
+          applyRosterSelectionById(entry.id, { skipPersist: true, skipRender: true });
+        } else {
+          if (!activeId || !walletState.roster.some((horse) => horse.id === activeId)) {
+            activeId = walletState.roster[0].id;
+          }
+          walletState.selectedId = activeId;
+          applyRosterSelectionById(activeId, { skipPersist: true, skipRender: true });
+        }
+      } else {
+        walletState.address = null;
+        walletState.roster = [];
+        walletState.selectedId = null;
+        walletState.availableNFTs = [];
+        walletState.lastFetch = 0;
+      }
+
+      updateWalletUI();
+      renderPaddockRoster();
+
+      if (walletState.address) {
+        fetchWalletNFTs(walletState.address).catch((error) => {
+          console.warn("NFT lookup failed:", error);
+        });
+      }
+    }
+
+    function loadStoredWallet() {
+      try {
+        return localStorage.getItem(WALLET_STORAGE_KEY) || null;
+      } catch (error) {
+        console.warn("Unable to access wallet storage:", error);
+        return null;
+      }
+    }
+
+    function saveWalletAddress(address) {
+      if (!address) return;
+      try {
+        localStorage.setItem(WALLET_STORAGE_KEY, address);
+      } catch (error) {
+        console.warn("Unable to persist wallet address:", error);
+      }
+    }
+
+    function getRosterKey(address) {
+      return `${ROSTER_STORAGE_PREFIX}_${address}`;
+    }
+
+    function getActiveKey(address) {
+      return `${ACTIVE_STORAGE_PREFIX}_${address}`;
+    }
+
+    function loadRoster(address) {
+      if (!address) return [];
+      try {
+        let raw = localStorage.getItem(getRosterKey(address));
+        if (!raw) {
+          const legacyKey = `projectStrideRoster_${address}`;
+          raw = localStorage.getItem(legacyKey);
+          if (raw) {
+            const legacyParsed = JSON.parse(raw);
+            const migrated = Array.isArray(legacyParsed)
+              ? { wallet: address, horses: legacyParsed }
+              : legacyParsed;
+            localStorage.setItem(getRosterKey(address), JSON.stringify(migrated));
+            localStorage.removeItem(legacyKey);
+            raw = JSON.stringify(migrated);
+          }
+        }
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+        if (parsed && Array.isArray(parsed.horses)) {
+          return parsed.horses;
+        }
+        return [];
+      } catch (error) {
+        console.warn("Unable to load roster:", error);
+        return [];
+      }
+    }
+
+    function saveRoster() {
+      if (!walletState.address) return;
+      const payload = {
+        wallet: walletState.address,
+        horses: walletState.roster
+      };
+      try {
+        localStorage.setItem(getRosterKey(walletState.address), JSON.stringify(payload));
+        localStorage.removeItem(`projectStrideRoster_${walletState.address}`);
+      } catch (error) {
+        console.warn("Unable to save roster:", error);
+      }
+    }
+
+    function loadActiveHorseId(address) {
+      if (!address) return null;
+      try {
+        return localStorage.getItem(getActiveKey(address));
+      } catch (error) {
+        console.warn("Unable to load active horse id:", error);
+        return null;
+      }
+    }
+
+    function saveActiveHorseId(address, id) {
+      if (!address) return;
+      const key = getActiveKey(address);
+      try {
+        if (!id) {
+          localStorage.removeItem(key);
+        } else {
+          localStorage.setItem(key, id);
+        }
+      } catch (error) {
+        console.warn("Unable to persist active horse id:", error);
+      }
+    }
+
+    function updateWalletUI() {
+      if (!elements.walletStatus) return;
+      const panel = elements.walletStatus.closest(".wallet-panel");
+
+      if (walletState.address) {
+        elements.walletStatus.textContent = `Connected: ${shortenAddress(walletState.address)}`;
+        if (panel) panel.classList.add("connected");
+        if (elements.walletConnect) {
+          elements.walletConnect.textContent = "Switch Wallet";
+        }
+      } else {
+        elements.walletStatus.textContent = "Wallet not connected";
+        if (panel) panel.classList.remove("connected");
+        if (elements.walletConnect) {
+          elements.walletConnect.textContent = "Connect Wallet";
+        }
+      }
+    }
+
+    async function connectWalletFlow() {
+      if (typeof window.ethereum === "undefined") {
+        updatePaddockMessage("MetaMask not detected. Install MetaMask to import NFTs.");
+        window.open("https://metamask.io/download/", "_blank", "noopener");
+        return;
+      }
+
+      try {
+        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        const address = accounts && accounts[0] ? accounts[0].toLowerCase() : null;
+        if (!address) return;
+
+        await window.ethereum.request({
+          method: "personal_sign",
+          params: ["Sign in to Horse Trainer Demo", address]
+        });
+
+        await handleWalletConnected(address);
+      } catch (error) {
+        console.warn("Wallet connection failed:", error);
+        updatePaddockMessage("Wallet connection was cancelled.");
+      }
+    }
+
+    async function handleWalletConnected(address) {
+      walletState.address = address;
+      saveWalletAddress(address);
+      walletState.availableNFTs = [];
+      walletState.lastFetch = 0;
+
+      walletState.roster = loadRoster(address);
+      if (!walletState.roster.length) {
+        const entry = createRosterEntryFromAvatar(state.avatar, {
+          tokenId: state.tokenId || generateTokenId(),
+          image: state.avatar.portrait || state.avatar.image,
+          collection: "Stable"
+        });
+        walletState.roster.push(entry);
+        walletState.selectedId = entry.id;
+      } else {
+        const saved = loadActiveHorseId(address);
+        if (saved && walletState.roster.some((horse) => horse.id === saved)) {
+          walletState.selectedId = saved;
+        } else {
+          walletState.selectedId = walletState.roster[0].id;
+        }
+      }
+
+      saveRoster();
+      saveActiveHorseId(address, walletState.selectedId);
+
+      updateWalletUI();
+      applyRosterSelectionById(walletState.selectedId);
+      await fetchWalletNFTs(address, { force: true });
+    }
+
+    function renderPaddockRoster() {
+      const grid = elements.paddockGrid;
+      if (!grid) return;
+
+      hidePaddockContextMenu();
+
+      const slots = Array.from(grid.querySelectorAll(".slot"));
+      slots.forEach((slot, index) => {
+        const entry = walletState.roster[index];
+        slot.classList.remove("filled", "selected");
+        slot.innerHTML = "";
+        slot.onclick = null;
+        slot.oncontextmenu = null;
+
+        if (!entry) {
+          slot.innerHTML = `
+            <strong>Empty Stall</strong>
+            <div class="horse-meta">Use Create or Import to fill this stable.</div>
+          `;
+          return;
+        }
+
+        slot.classList.add("filled");
+        if (entry.id === walletState.selectedId) {
+          slot.classList.add("selected");
+        }
+
+        const img = document.createElement("img");
+        img.src = entry.image || PLACEHOLDER_IMAGE;
+        img.alt = entry.name;
+
+        const name = document.createElement("div");
+        name.className = "horse-name";
+        name.textContent = entry.name;
+
+        const meta = document.createElement("div");
+        meta.className = "horse-meta";
+        meta.textContent =
+          entry.collection === "DayJobPunks"
+            ? `Dayjob Punk #${entry.tokenId}`
+            : "Stable Horse";
+
+        const stats = document.createElement("div");
+        stats.className = "horse-stats";
+        const statOrder = ["stride", "endurance", "force", "resolve", "insight"];
+        statOrder.forEach((statKey) => {
+          const value = entry.avatar.stats?.[statKey];
+          if (typeof value === "number") {
+            const statEl = document.createElement("span");
+            statEl.textContent = `${capitalize(statKey)} ${value}`;
+            stats.appendChild(statEl);
+          }
+        });
+
+        const sessions = document.createElement("div");
+        sessions.className = "horse-meta";
+        sessions.textContent = `${entry.avatar.sessions ?? 0} sessions remaining`;
+
+        const actions = document.createElement("div");
+        actions.className = "slot-actions";
+
+        const selectBtn = document.createElement("button");
+        if (entry.id === walletState.selectedId) {
+          selectBtn.textContent = "Active";
+          selectBtn.disabled = true;
+        } else {
+          selectBtn.textContent = "Set Active";
+          selectBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            applyRosterSelectionById(entry.id);
+          });
+        }
+
+        const releaseBtn = document.createElement("button");
+        releaseBtn.className = "secondary";
+        releaseBtn.textContent = "Release";
+        releaseBtn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          releaseHorse(entry.id);
+        });
+
+        actions.appendChild(selectBtn);
+        actions.appendChild(releaseBtn);
+
+        slot.appendChild(img);
+        slot.appendChild(name);
+        slot.appendChild(meta);
+        slot.appendChild(stats);
+        slot.appendChild(sessions);
+        slot.appendChild(actions);
+
+        slot.onclick = () => {
+          applyRosterSelectionById(entry.id);
+        };
+        slot.oncontextmenu = (event) => {
+          openPaddockContextMenu(event, entry);
+        };
+      });
+
+      if (elements.createHorseBtn) {
+        elements.createHorseBtn.disabled = !walletState.address || walletState.roster.length >= 4;
+      }
+      if (elements.importHorseBtn) {
+        elements.importHorseBtn.disabled = !walletState.address || walletState.roster.length >= 4;
+      }
+
+      updatePaddockMessage();
+    }
+
+    function updatePaddockMessage(message) {
+      if (!elements.paddockMessage) return;
+      if (message) {
+        elements.paddockMessage.textContent = message;
+        return;
+      }
+
+      if (!walletState.address) {
+        elements.paddockMessage.textContent =
+          "Connect MetaMask to import Dayjob Punks NFTs or create stable horses.";
+        return;
+      }
+
+      const rosterCount = walletState.roster.length;
+      if (rosterCount >= 4) {
+        elements.paddockMessage.textContent =
+          "All stalls are occupied. Release a horse to import an NFT or create a new trainee.";
+        return;
+      }
+      const nftCount = walletState.availableNFTs.length;
+      const pluralNFT = nftCount === 1 ? "" : "s";
+      const nftText =
+        nftCount > 0
+          ? `${nftCount} NFT${pluralNFT} ready to import.`
+          : "No Dayjob Punks detected yet.";
+      elements.paddockMessage.textContent = `${rosterCount}/4 horses in the paddock. ${nftText}`;
+    }
+
+    function openPaddockContextMenu(event, entry) {
+      if (!elements.paddockContextMenu) return;
+      event.preventDefault();
+      hidePaddockContextMenu();
+      contextMenuEntryId = entry.id;
+      const menu = elements.paddockContextMenu;
+      menu.innerHTML = `
+        <button data-action="view">View Stats</button>
+        <button data-action="set">Set as Main Horse</button>
+        <button data-action="release">Release Horse</button>
+      `;
+      menu.dataset.entryId = entry.id;
+      menu.style.visibility = "hidden";
+      menu.hidden = false;
+
+      const { pageX, pageY } = event;
+      // Force layout to measure size
+      const width = menu.offsetWidth || 180;
+      const height = menu.offsetHeight || 160;
+      const viewportWidth = document.documentElement.clientWidth;
+      const viewportHeight = document.documentElement.clientHeight;
+      let left = pageX;
+      let top = pageY;
+      if (left + width > viewportWidth) {
+        left = Math.max(8, viewportWidth - width - 8);
+      }
+      if (top + height > viewportHeight) {
+        top = Math.max(8, viewportHeight - height - 8);
+      }
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
+      menu.style.visibility = "visible";
+    }
+
+    function hidePaddockContextMenu() {
+      const menu = elements.paddockContextMenu;
+      if (!menu) return;
+      if (!menu.hidden) {
+        menu.hidden = true;
+        menu.innerHTML = "";
+      }
+      contextMenuEntryId = null;
+    }
+
+    function onPaddockContextAction(event) {
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+      event.preventDefault();
+      const action = button.dataset.action;
+      const entryId = contextMenuEntryId;
+      hidePaddockContextMenu();
+      if (!entryId) return;
+      const entry = walletState.roster.find((horse) => horse.id === entryId);
+      if (!entry) return;
+      switch (action) {
+        case "view":
+          showHorseStats(entry);
+          break;
+        case "set":
+          applyRosterSelectionById(entry.id);
+          break;
+        case "release":
+          releaseHorse(entry.id);
+          break;
+        default:
+          break;
+      }
+    }
+
+    function showHorseStats(entry) {
+      const stats = entry.avatar?.stats || {};
+      const mood = typeof entry.avatar?.mood === "number" ? `${entry.avatar.mood}%` : "—";
+      const lines = [
+        `${entry.name}`,
+        `Collection: ${entry.collection || "Stable"}`,
+        `Sessions left: ${entry.avatar.sessions ?? 0}`,
+        `Mood: ${mood}`,
+        `Stride: ${stats.stride ?? "--"}`,
+        `Endurance: ${stats.endurance ?? "--"}`,
+        `Force: ${stats.force ?? "--"}`,
+        `Resolve: ${stats.resolve ?? "--"}`,
+        `Insight: ${stats.insight ?? "--"}`
+      ];
+      window.alert(lines.join("\n"));
+    }
+
+    function createRosterEntryFromAvatar(avatar, overrides = {}) {
+      const snapshot = deepClone(avatar);
+      finalizeAvatarSnapshot(snapshot);
+      const entryId = `horse_${Math.random().toString(36).slice(2, 10)}`;
+      const image = overrides.image || snapshot.portrait || snapshot.image || PLACEHOLDER_IMAGE;
+      const tokenId = overrides.tokenId || snapshot.tokenId || generateTokenId();
+      return {
+        id: entryId,
+        name: snapshot.name,
+        avatar: snapshot,
+        image,
+        tokenId,
+        collection: overrides.collection || (overrides.tokenId ? "DayJobPunks" : "Stable"),
+        createdAt: overrides.createdAt || Date.now()
+      };
+    }
+
+    function finalizeAvatarSnapshot(avatar) {
+      if (!avatar || !avatar.stats) return avatar;
+      const modifiers = avatar.modifiers || {};
+      avatar.sessions = typeof avatar.sessions === "number" ? avatar.sessions : 10;
+      avatar.portrait = avatar.portrait || avatar.image || PLACEHOLDER_IMAGE;
+      const profile = buildRacingProfile(avatar.stats, modifiers);
+      const secondary = deriveSecondaryStats(avatar.stats, modifiers, profile.aptitudes);
+      avatar.profile = {
+        performance: deepClone(profile.performance),
+        aptitudes: deepClone(profile.aptitudes),
+        secondary: deepClone(secondary)
+      };
+      avatar.performance = deepClone(profile.performance);
+      avatar.aptitudes = deepClone(profile.aptitudes);
+      avatar.secondary = deepClone(secondary);
+      avatar.maneuverRating = avatar.performance.maneuver;
+      return avatar;
+    }
+
+    function applyRosterSelectionById(id, { skipPersist = false, skipRender = false } = {}) {
+      const entry = walletState.roster.find((horse) => horse.id === id);
+      if (!entry) return;
+
+      walletState.selectedId = entry.id;
+      if (!skipPersist && walletState.address) {
+        saveActiveHorseId(walletState.address, entry.id);
+      }
+
+      state.avatar = deepClone(entry.avatar);
+      ensureAvatarSchema();
+      state.tokenId = entry.tokenId || state.tokenId || generateTokenId();
+      Storage.saveCurrentAvatar(state.avatar);
+      Storage.saveTokenId(state.tokenId);
+      refreshUI();
+      if (!skipRender) {
+        renderPaddockRoster();
+      }
+    }
+
+    function syncActiveHorse() {
+      if (!walletState.address || !walletState.selectedId) return;
+      const entry = walletState.roster.find((horse) => horse.id === walletState.selectedId);
+      if (!entry) return;
+      entry.avatar = deepClone(state.avatar);
+      entry.name = state.avatar.name;
+      entry.image = state.avatar.portrait || state.avatar.image || entry.image || PLACEHOLDER_IMAGE;
+      entry.tokenId = state.tokenId || entry.tokenId;
+      saveRoster();
+    }
+
+    function createStableHorse() {
+      if (!walletState.address) {
+        updatePaddockMessage("Connect your wallet before creating stable horses.");
+        return;
+      }
+      if (walletState.roster.length >= 4) {
+        updatePaddockMessage("All stalls are occupied. Release a horse to add another.");
+        return;
+      }
+
+      const avatar = createBaseAvatar();
+      avatar.name = `Stable Horse #${String(walletState.roster.length + 1).padStart(3, "0")}`;
+      avatar.sessions = 10;
+      avatar.stats = {
+        stride: rollStat(50, 70),
+        endurance: rollStat(50, 70),
+        force: rollStat(45, 65),
+        resolve: rollStat(45, 65),
+        insight: rollStat(50, 70)
+      };
+      avatar.mood = clamp(Math.round(70 + Math.random() * 20), 0, 100);
+      avatar.portrait = PLACEHOLDER_IMAGE;
+      finalizeAvatarSnapshot(avatar);
+
+      const entry = createRosterEntryFromAvatar(avatar, {
+        tokenId: generateTokenId(),
+        collection: "Stable",
+        image: PLACEHOLDER_IMAGE
+      });
+
+      walletState.roster.push(entry);
+      saveRoster();
+      applyRosterSelectionById(entry.id);
+    }
+
+    async function openNFTImport() {
+      if (!walletState.address) {
+        updatePaddockMessage("Connect MetaMask to import Dayjob Punk NFTs.");
+        return;
+      }
+
+      if (walletState.roster.length >= 4) {
+        updatePaddockMessage("All stalls are occupied. Release a horse to import a new one.");
+        return;
+      }
+
+      if (!walletState.availableNFTs.length || Date.now() - walletState.lastFetch > 90_000) {
+        await fetchWalletNFTs(walletState.address, { force: true });
+      }
+
+      const next = walletState.availableNFTs.find(
+        (nft) => nft && !isNftImported(nft.tokenId)
+      );
+
+      if (!next) {
+        updatePaddockMessage("No Dayjob Punks available to import.");
+        return;
+      }
+
+      importNftIntoRoster(next);
+    }
+
+    function isNftImported(tokenId) {
+      if (!tokenId) return false;
+      return walletState.roster.some(
+        (horse) => horse.collection === "DayJobPunks" && horse.tokenId === tokenId
+      );
+    }
+
+    function importNftIntoRoster(nft) {
+      if (!nft || !nft.tokenId) return;
+      if (isNftImported(nft.tokenId)) {
+        updatePaddockMessage("That Dayjob Punk is already in your paddock.");
+        return;
+      }
+
+      const avatar = createBaseAvatar();
+      const portrait = normalizeImageUrl(nft.image) || PLACEHOLDER_IMAGE;
+      avatar.name = nft.name || `Dayjob Punk #${nft.tokenId}`;
+      avatar.sessions = 10;
+      avatar.stats = {
+        stride: rollStat(60, 80),
+        endurance: rollStat(60, 80),
+        force: rollStat(50, 70),
+        resolve: rollStat(50, 70),
+        insight: rollStat(55, 75)
+      };
+      avatar.mood = clamp(Math.round(75 + Math.random() * 20), 0, 100);
+      avatar.portrait = portrait;
+      finalizeAvatarSnapshot(avatar);
+
+      const entry = createRosterEntryFromAvatar(avatar, {
+        tokenId: nft.tokenId,
+        collection: "DayJobPunks",
+        image: portrait
+      });
+
+      walletState.roster.push(entry);
+      saveRoster();
+      applyRosterSelectionById(entry.id);
+      walletState.availableNFTs = walletState.availableNFTs.filter((item) => item.tokenId !== nft.tokenId);
+      updatePaddockMessage();
+    }
+
+    function releaseHorse(id) {
+      const index = walletState.roster.findIndex((horse) => horse.id === id);
+      if (index === -1) return;
+      const confirmRelease = window.confirm("Release this horse from the paddock?");
+      if (!confirmRelease) return;
+
+      const wasActive = walletState.selectedId === id;
+      walletState.roster.splice(index, 1);
+      saveRoster();
+
+      if (!walletState.roster.length) {
+        walletState.selectedId = null;
+        if (walletState.address) {
+          saveActiveHorseId(walletState.address, null);
+        }
+        renderPaddockRoster();
+        return;
+      }
+
+      if (wasActive) {
+        const nextEntry = walletState.roster[Math.max(0, index - 1)];
+        applyRosterSelectionById(nextEntry.id, { skipPersist: false });
+      } else {
+        renderPaddockRoster();
+      }
+    }
+
+    function rollStat(min, max) {
+      return Math.round(min + Math.random() * (max - min));
+    }
+
+    function shortenAddress(address) {
+      if (!address) return "";
+      return `${address.slice(0, 6)}…${address.slice(-4)}`;
+    }
+
+    function normalizeImageUrl(url) {
+      if (!url) return null;
+      if (url.startsWith("ipfs://")) {
+        return `https://ipfs.io/ipfs/${url.replace("ipfs://", "")}`;
+      }
+      if (url.startsWith("ipfs/")) {
+        return `https://ipfs.io/${url}`;
+      }
+      return url;
+    }
+
+    async function fetchWalletNFTs(address, { force = false } = {}) {
+      if (!address) return [];
+      const normalized = address.toLowerCase();
+      if (!force && walletState.availableNFTs.length && Date.now() - walletState.lastFetch < 60_000) {
+        return walletState.availableNFTs;
+      }
+
+      let results = [];
+
+      try {
+        results = await fetchReservoirNFTs(normalized);
+      } catch (error) {
+        console.warn("Reservoir lookup failed:", error);
+      }
+
+      if (!results.length) {
+        try {
+          results = await fetchOpenSeaNFTs(normalized);
+        } catch (error) {
+          console.warn("OpenSea lookup failed:", error);
+        }
+      }
+
+      walletState.availableNFTs = results;
+      walletState.lastFetch = Date.now();
+      if (elements.importHorseBtn) {
+        elements.importHorseBtn.disabled = !walletState.address || walletState.roster.length >= 4;
+      }
+      updatePaddockMessage();
+      return results;
+    }
+
+    async function fetchReservoirNFTs(address) {
+      const params = new URLSearchParams({
+        contract: DAYJOB_PUNKS_CONTRACT,
+        limit: "50"
+      });
+      const url = `https://api.reservoir.tools/users/${address}/tokens/v10?${params.toString()}`;
+      const headers = {
+        Accept: "application/json"
+      };
+      if (RESERVOIR_API_KEY) {
+        headers["x-api-key"] = RESERVOIR_API_KEY;
+      }
+
+      const response = await fetch(url, { headers });
+      if (!response.ok) {
+        throw new Error(`Reservoir responded with ${response.status}`);
+      }
+      const data = await response.json();
+      const tokens = data?.tokens || [];
+
+      return tokens
+        .map((item) => item?.token)
+        .filter((token) => token?.contract?.toLowerCase() === DAYJOB_PUNKS_CONTRACT)
+        .map((token) => ({
+          tokenId: token.tokenId,
+          name: token.name || `Dayjob Punk #${token.tokenId}`,
+          image: normalizeImageUrl(token.image || token.media?.[0]?.gateway || token.metadata?.image)
+        }))
+        .filter((item) => item.tokenId);
+    }
+
+    async function fetchOpenSeaNFTs(address) {
+      const url = `https://api.opensea.io/api/v2/chain/ethereum/account/${address}/nfts?limit=50&contract_address=${DAYJOB_PUNKS_CONTRACT}`;
+      const headers = {
+        Accept: "application/json"
+      };
+      if (OPENSEA_API_KEY) {
+        headers["x-api-key"] = OPENSEA_API_KEY;
+      }
+      const response = await fetch(url, { headers });
+      if (!response.ok) {
+        throw new Error(`OpenSea responded with ${response.status}`);
+      }
+      const data = await response.json();
+      const nfts = data?.nfts || [];
+
+      return nfts
+        .map((item) => ({
+          tokenId: item.identifier || item.token_id,
+          name: item.name || item.collection?.name || `Dayjob Punk #${item.identifier}`,
+          image: normalizeImageUrl(item.image_url || item.metadata?.image_url || item.metadata?.image)
+        }))
+        .filter((item) => item.tokenId);
+    }
+  
+    function onLegacyAction(event) {
     const button = event.target.closest("button[data-action]");
     if (!button) return;
 
@@ -418,6 +1329,27 @@
 
     Storage.saveCurrentAvatar(state.avatar);
     Storage.saveTokenId(state.tokenId);
+      if (walletState.address) {
+        const replacement = createRosterEntryFromAvatar(state.avatar, {
+          tokenId: state.tokenId,
+          image: state.avatar.portrait || state.avatar.image || PLACEHOLDER_IMAGE,
+          collection: "Stable"
+        });
+        if (walletState.selectedId) {
+          const index = walletState.roster.findIndex((horse) => horse.id === walletState.selectedId);
+          if (index >= 0) {
+            walletState.roster[index] = replacement;
+          } else {
+            walletState.roster.push(replacement);
+          }
+        } else {
+          walletState.roster.push(replacement);
+        }
+        walletState.selectedId = replacement.id;
+        saveRoster();
+        saveActiveHorseId(walletState.address, replacement.id);
+        renderPaddockRoster();
+      }
 
     addTrainingLog(`Revived a trainee inspired by ${record.name}.`, "success");
     refreshUI();
@@ -454,27 +1386,58 @@
     });
   }
 
-  function showScreen(screen) {
-    state.currentScreen = screen;
-    switch (screen) {
-      case "menu":
-        elements.menuScreen.hidden = false;
-        elements.trainingScreen.hidden = true;
-        elements.raceScreen.hidden = true;
-        break;
-      case "training":
-        elements.menuScreen.hidden = true;
-        elements.trainingScreen.hidden = false;
-        elements.raceScreen.hidden = true;
-        break;
-      case "race":
-        elements.menuScreen.hidden = true;
-        elements.trainingScreen.hidden = true;
-        elements.raceScreen.hidden = false;
-        drawRaceIdle();
-        break;
+    function navigateScreen(target) {
+      if (state.currentScreen === "race" && target !== "race") {
+        stopRace();
+      }
+      switch (target) {
+        case "training":
+        case "race":
+        case "paddock":
+        case "retired":
+          showScreen(target);
+          break;
+        default:
+          showScreen("menu");
+          break;
+      }
     }
-  }
+
+    function showScreen(screen) {
+      state.currentScreen = screen;
+      const screens = [
+        { key: "menu", el: elements.menuScreen },
+        { key: "training", el: elements.trainingScreen },
+        { key: "race", el: elements.raceScreen },
+        { key: "paddock", el: elements.paddockScreen },
+        { key: "retired", el: elements.retiredScreen }
+      ];
+
+      screens.forEach(({ key, el }) => {
+        if (!el) return;
+        el.hidden = key !== screen;
+      });
+
+      switch (screen) {
+        case "training":
+          updateTrainingStatusUI();
+          break;
+        case "race":
+          drawRaceIdle();
+          break;
+        case "paddock":
+          renderPaddockRoster();
+          break;
+        case "retired":
+          renderRetiredStable();
+          break;
+        default:
+          break;
+      }
+      if (screen !== "paddock") {
+        hidePaddockContextMenu();
+      }
+    }
 
   function onMenuAction(event) {
     const action = event.currentTarget.dataset.action;
@@ -487,6 +1450,12 @@
       case "race":
         showScreen("race");
         break;
+        case "paddock":
+          showScreen("paddock");
+          break;
+        case "retired":
+          showScreen("retired");
+          break;
       case "retire":
         if (state.avatar.sessions === 0) {
           handleRetire();
@@ -499,6 +1468,78 @@
         break;
     }
   }
+
+    function beginTrainingSession(stat) {
+      if (trainingSession.active) {
+        addTrainingLog("Training already in progress.", "info");
+        return;
+      }
+
+      if (state.avatar.sessions <= 0) {
+        addTrainingLog("No training sessions remaining.", "warn");
+        updateTrainingStatusUI();
+        refreshUI();
+        return;
+      }
+
+      const duration = 3 + Math.random() * 2;
+      trainingSession.active = true;
+      trainingSession.pendingStat = stat;
+      trainingSession.countdown = duration;
+
+      setTrainingButtonsDisabled(true);
+      updateTrainingTimerDisplay(duration);
+
+      const prettyStat = stat.charAt(0).toUpperCase() + stat.slice(1);
+      addTrainingLog(`Training ${prettyStat}...`, "info");
+
+      trainingSession.intervalId = window.setInterval(() => {
+        trainingSession.countdown = Math.max(0, trainingSession.countdown - 0.1);
+        updateTrainingTimerDisplay();
+      }, 100);
+
+      trainingSession.timerId = window.setTimeout(() => {
+        clearTrainingCountdown();
+        handleTrain(stat);
+      }, duration * 1000);
+    }
+
+    function clearTrainingCountdown() {
+      if (trainingSession.intervalId) {
+        window.clearInterval(trainingSession.intervalId);
+      }
+      if (trainingSession.timerId) {
+        window.clearTimeout(trainingSession.timerId);
+      }
+      trainingSession.active = false;
+      trainingSession.intervalId = null;
+      trainingSession.timerId = null;
+      trainingSession.countdown = 0;
+      trainingSession.pendingStat = null;
+      setTrainingButtonsDisabled(false);
+      updateTrainingTimerDisplay(0);
+    }
+
+    function updateTrainingStatusUI() {
+      if (elements.sessionsLeft) {
+        elements.sessionsLeft.textContent = state.avatar.sessions;
+      }
+      if (!trainingSession.active) {
+        updateTrainingTimerDisplay(0);
+      }
+    }
+
+    function setTrainingButtonsDisabled(disabled) {
+      elements.trainingButtons.forEach((button) => {
+        button.disabled = disabled;
+      });
+    }
+
+    function updateTrainingTimerDisplay(value = trainingSession.countdown) {
+      if (!elements.trainingTimer) return;
+      const display = Math.max(0, value);
+      elements.trainingTimer.textContent = `${display.toFixed(1)}s`;
+    }
 
     function handleTrain(stat) {
       if (state.avatar.sessions <= 0) {
@@ -641,9 +1682,11 @@
         }
       }
 
-      tryUnlockSkill(stat, modifiers);
-      Storage.saveCurrentAvatar(state.avatar);
-      refreshUI();
+        tryUnlockSkill(stat, modifiers);
+        Storage.saveCurrentAvatar(state.avatar);
+        syncActiveHorse();
+        refreshUI();
+        renderPaddockRoster();
 
       if (state.avatar.sessions === 0) {
         addTrainingLog("Training complete. Consider retiring to gain legacy bonuses.", "info");
@@ -694,24 +1737,27 @@
     }
 
   function handleRetire() {
-    const confirmRetire = window.confirm(
+      clearTrainingCountdown();
+      const confirmRetire = window.confirm(
       "Retire this avatar? Their stats and skills will become a legacy bonus for the next trainee."
     );
     if (!confirmRetire) return;
 
-    const record = {
-      name: state.avatar.name,
-      stats: deepClone(state.avatar.stats),
-      skills: deepClone(state.avatar.skills),
-      tokenId: state.tokenId,
-      retiredAt: Date.now(),
-      mood: state.avatar.mood,
-      style: state.avatar.style,
-      aptitudes: deepClone(state.avatar.aptitudes || {}),
-      profile: deepClone(state.avatar.profile || {})
-    };
+      const record = {
+        name: state.avatar.name,
+        stats: deepClone(state.avatar.stats),
+        skills: deepClone(state.avatar.skills),
+        tokenId: state.tokenId,
+        retiredAt: Date.now(),
+        mood: state.avatar.mood,
+        style: state.avatar.style,
+        aptitudes: deepClone(state.avatar.aptitudes || {}),
+        profile: deepClone(state.avatar.profile || {}),
+        image: state.avatar.portrait || state.avatar.image || PLACEHOLDER_IMAGE
+      };
 
     state.legacyRecords = Storage.addLegacyRecord(record);
+      renderRetiredStable();
 
     const nextAvatar = createBaseAvatar({ legacyBonus: true, legacyData: record });
     state.avatar = nextAvatar;
@@ -723,6 +1769,27 @@
 
     Storage.saveCurrentAvatar(state.avatar);
     Storage.saveTokenId(state.tokenId);
+      if (walletState.address) {
+        const replacement = createRosterEntryFromAvatar(state.avatar, {
+          tokenId: state.tokenId,
+          image: state.avatar.portrait || state.avatar.image || PLACEHOLDER_IMAGE,
+          collection: "Stable"
+        });
+        if (walletState.selectedId) {
+          const index = walletState.roster.findIndex((horse) => horse.id === walletState.selectedId);
+          if (index >= 0) {
+            walletState.roster[index] = replacement;
+          } else {
+            walletState.roster.push(replacement);
+          }
+        } else {
+          walletState.roster.push(replacement);
+        }
+        walletState.selectedId = replacement.id;
+        saveRoster();
+        saveActiveHorseId(walletState.address, replacement.id);
+        renderPaddockRoster();
+      }
 
     addTrainingLog("New legacy avatar created with boosted potential!", "success");
     refreshUI();
@@ -730,7 +1797,8 @@
   }
 
   function handleReset() {
-    const confirmReset = window.confirm(
+      clearTrainingCountdown();
+      const confirmReset = window.confirm(
       "Reset all data? This will delete current avatar and legacy history."
     );
     if (!confirmReset) return;
@@ -739,6 +1807,16 @@
     state.trainingLog = [];
     state.lastTrainedStat = null;
     state.legacyRecords = [];
+      if (walletState.address) {
+        localStorage.removeItem(getRosterKey(walletState.address));
+        localStorage.removeItem(`projectStrideRoster_${walletState.address}`);
+        localStorage.removeItem(getActiveKey(walletState.address));
+      }
+      walletState.roster = [];
+      walletState.selectedId = null;
+      walletState.availableNFTs = [];
+      walletState.lastFetch = 0;
+      renderPaddockRoster();
     init();
   }
 
