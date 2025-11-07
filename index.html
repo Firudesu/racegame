@@ -3,8 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Project Stride – Demo</title>
+  <title>Project Stride – Multiplayer</title>
   <link rel="stylesheet" href="style.css" />
+  
+  <!-- Supabase Client Library -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
   <body>
     <div id="app">
@@ -233,8 +236,11 @@
     </div>
   </div>
 
+  <!-- Load in order -->
+  <script src="supabase-config.js"></script>
   <script src="data.js"></script>
   <script src="storage.js"></script>
   <script src="main.js"></script>
+  <script src="multiplayer.js"></script>
 </body>
 </html>
