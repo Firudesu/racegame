@@ -1893,14 +1893,21 @@
     function updateAvatarProfile({ persist = false } = {}) {
       if (!state.avatar || !state.avatar.stats) return;
       const profile = buildRacingProfile(state.avatar.stats, state.avatar.modifiers || {});
+      
+      // Safety check - ensure profile properties exist
+      if (!profile || !profile.performance) {
+        console.error('[updateAvatarProfile] Invalid profile returned from buildRacingProfile');
+        return;
+      }
+      
       state.avatar.profile = {
         performance: { ...profile.performance },
-        aptitudes: deepClone(profile.aptitudes),
-        secondary: deepClone(profile.secondary)
+        aptitudes: profile.aptitudes ? deepClone(profile.aptitudes) : {},
+        secondary: profile.secondary ? deepClone(profile.secondary) : {}
       };
       state.avatar.performance = { ...profile.performance };
-      state.avatar.aptitudes = deepClone(profile.aptitudes);
-      state.avatar.secondary = deepClone(profile.secondary);
+      state.avatar.aptitudes = profile.aptitudes ? deepClone(profile.aptitudes) : {};
+      state.avatar.secondary = profile.secondary ? deepClone(profile.secondary) : {};
       state.avatar.maneuverRating = profile.performance.maneuver;
       if (persist) {
         Storage.saveCurrentAvatar(state.avatar);
