@@ -21,50 +21,124 @@
   <main class="layout">
     <section class="map-board">
       <div class="map-overlay"></div>
-      <div class="map-card">
-        <img src="assets/gym-icon.png" alt="" />
-        <div>
-          <h2>Training Grounds</h2>
-          <p>Run skill drills and improve stats.</p>
-        </div>
-      </div>
-      <div class="map-card">
-        <img src="assets/paddock-icon.png" alt="" />
-        <div>
-          <h2>Paddock</h2>
-          <p>Manage horses imported from NFTs or create new ones.</p>
-        </div>
-      </div>
-      <div class="map-card">
-        <img src="assets/racetrack-icon.png" alt="" />
-        <div>
-          <h2>Race Track</h2>
-          <p>Select a horse for the next mock race.</p>
-        </div>
-      </div>
-      <div class="map-card">
-        <img src="assets/tree.png" alt="" />
-        <div>
-          <h2>Retired Stable</h2>
-          <p>Legacy champions resting in style.</p>
-        </div>
-      </div>
+      <button class="map-pin training" data-target="training">
+        <img src="assets/gym-icon.png" alt="Training Grounds icon" />
+        <span>Training Grounds</span>
+      </button>
+      <button class="map-pin paddock" data-target="paddock">
+        <img src="assets/paddock-icon.png" alt="Paddock icon" />
+        <span>Paddock</span>
+      </button>
+      <button class="map-pin race" data-target="race">
+        <img src="assets/racetrack-icon.png" alt="Race Track icon" />
+        <span>Race Track</span>
+      </button>
+      <button class="map-pin retired" data-target="retired">
+        <img src="assets/tree.png" alt="Retired Stable icon" />
+        <span>Retired Stable</span>
+      </button>
     </section>
 
-    <section class="paddock-panel">
-      <header>
-        <h2>Your Paddock</h2>
-        <p id="paddockMessage">
-          Connect MetaMask to import Dayjob Punk NFTs. If none are found, you can create horses for testing.
+    <div class="panel-stack">
+      <section class="panel active" id="panel-info">
+        <h2>Welcome to the Horse Trainer Demo</h2>
+        <p>
+          Use the map to jump between activities. Connect MetaMask to pull in your Dayjob Punks NFTs
+          and use their artwork as horse avatars. No NFTs? Create stable horses and keep training.
         </p>
-      </header>
-      <div class="paddock" id="paddock">
-        <div class="slot" data-index="0"></div>
-        <div class="slot" data-index="1"></div>
-        <div class="slot" data-index="2"></div>
-        <div class="slot" data-index="3"></div>
-      </div>
-    </section>
+        <ul>
+          <li><strong>Training Grounds:</strong> Run focused drills and build stats.</li>
+          <li><strong>Paddock:</strong> Import NFTs or create up to four active horses.</li>
+          <li><strong>Race Track:</strong> Select a horse and try a quick 2D race.</li>
+          <li><strong>Retired Stable:</strong> View legacy horses you retire from racing.</li>
+        </ul>
+      </section>
+
+      <section class="panel hidden" id="panel-training">
+        <div class="panel-heading">
+          <div>
+            <h2>Training Grounds</h2>
+            <p>Pick a focus area to boost the selected horse. Results apply instantly.</p>
+          </div>
+          <div class="current-horse" id="trainingHorseCard">
+            <img src="assets/default_horse.svg" alt="" />
+            <div>
+              <h3 id="trainingHorseName">No horse selected</h3>
+              <p id="trainingHorseStats">Select a horse in the paddock first.</p>
+            </div>
+          </div>
+        </div>
+        <div class="training-options">
+          <button data-train="stride">
+            Stride<span>Improve launch speed</span>
+          </button>
+          <button data-train="endurance">
+            Endurance<span>Longer sustained runs</span>
+          </button>
+          <button data-train="force">
+            Force<span>More push during sprints</span>
+          </button>
+          <button data-train="resolve">
+            Resolve<span>Finish-line mentality</span>
+          </button>
+          <button data-train="insight">
+            Insight<span>Smarter race decisions</span>
+          </button>
+        </div>
+        <div class="training-log">
+          <h3>Recent Sessions</h3>
+          <ul id="trainingLog"></ul>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="panel-paddock">
+        <div class="panel-heading">
+          <div>
+            <h2>Paddock</h2>
+            <p id="paddockMessage">
+              Connect MetaMask to import Dayjob Punks NFTs. If none are found, you can create horses for testing.
+            </p>
+          </div>
+          <div class="panel-actions">
+            <button id="createHorseBtn">Create Horse</button>
+            <button id="importHorseBtn">Import NFT</button>
+          </div>
+        </div>
+        <div class="paddock" id="paddock">
+          <div class="slot" data-index="0"></div>
+          <div class="slot" data-index="1"></div>
+          <div class="slot" data-index="2"></div>
+          <div class="slot" data-index="3"></div>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="panel-race">
+        <div class="panel-heading">
+          <div>
+            <h2>Race Track</h2>
+            <p>Choose your runner and tap <em>Start Race</em> to compete against AI rivals.</p>
+          </div>
+          <div class="current-horse" id="raceHorseCard">
+            <img src="assets/default_horse.svg" alt="" />
+            <div>
+              <h3 id="raceHorseName">No horse selected</h3>
+              <p id="raceHorseStats">Pick a horse from the paddock to race.</p>
+            </div>
+          </div>
+        </div>
+        <canvas id="raceCanvas" width="560" height="240"></canvas>
+        <div class="race-controls">
+          <button id="startRaceBtn">Start Race</button>
+          <div id="raceStatus" class="race-status">Awaiting race selection…</div>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="panel-retired">
+        <h2>Retired Stable</h2>
+        <p>Retire horses from the paddock to archive them here with their stats and artwork.</p>
+        <div id="retiredList" class="retired-list empty">No retired horses yet.</div>
+      </section>
+    </div>
   </main>
 
   <footer class="app-footer">
