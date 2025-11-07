@@ -344,7 +344,11 @@
       window.addEventListener("resize", () => {
         resizeCanvas();
         if (state.currentScreen === "race") {
-          drawRaceFrame();
+          if (state.race) {
+            drawRace(state.race);
+          } else {
+            drawRaceIdle();
+          }
         } else {
           drawRaceIdle();
         }
