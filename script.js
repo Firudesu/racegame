@@ -2,7 +2,7 @@ const DAYJOB_PUNKS_CONTRACT = "0xa8d334c9cf7fc57eba51bf4d98bd880cb16a0de8".toLow
 const WALLET_KEY = "horseWallet";
 const PLACEHOLDER_IMAGE = "assets/default_horse.svg";
 const RESERVOIR_API_KEY = ""; // Optional: add your Reservoir API key here
-const OPENSEA_API_KEY = ""; // Optional: add your OpenSea API key here
+const OPENSEA_API_KEY = "fb2b196277d540ae95283e91d5f4d276";
 
 const state = {
   wallet: null,
