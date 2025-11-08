@@ -280,11 +280,16 @@
   // =====================================================
 
   function startMatchChecking() {
-    // Check for matches every 3 seconds
-    multiplayerState.matchCheckInterval = setInterval(checkForMatch, 3000);
+    // Add a small random delay to prevent all clients from checking at exactly the same time
+    const randomDelay = Math.random() * 1000; // 0-1 second random delay
     
-    // Also check immediately
-    checkForMatch();
+    setTimeout(() => {
+      // Check for matches every 3 seconds
+      multiplayerState.matchCheckInterval = setInterval(checkForMatch, 3000);
+      
+      // Also check immediately (after the initial random delay)
+      checkForMatch();
+    }, randomDelay);
   }
 
   async function checkForMatch() {
@@ -338,6 +343,15 @@
       // This prevents race conditions where multiple clients try to match the same players
       
       const ids = queueEntries.map(e => e.id);
+      console.log('[Multiplayer] Attempting to claim players:', ids);
+      
+      // First, check current status of these entries
+      const { data: checkData } = await supabase
+        .from('race_queue')
+        .select('id, status')
+        .in('id', ids);
+      
+      console.log('[Multiplayer] Current status before claim:', checkData);
       
       const { data, error } = await supabase
         .from('race_queue')
@@ -350,6 +364,8 @@
         console.error('[Multiplayer] Error claiming players:', error);
         return false;
       }
+
+      console.log('[Multiplayer] Claim result:', data);
 
       // Check if we successfully claimed both players
       if (data && data.length === 2) {
