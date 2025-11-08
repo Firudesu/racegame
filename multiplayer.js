@@ -309,9 +309,21 @@
         const myEntry = queueEntries.find(e => e.id === multiplayerState.queueEntryId);
         const myIndex = queueEntries.findIndex(e => e.id === multiplayerState.queueEntryId);
 
-        if (myIndex < 2) {
-          console.log('[Multiplayer] 🎉 Match found! Creating race...');
-          await createMultiplayerRace(queueEntries.slice(0, 2));
+        if (myIndex === 0) {
+          // Only the FIRST player in queue initiates the match
+          console.log('[Multiplayer] 🎉 Match found! You are first - creating race...');
+          
+          // Atomically claim these players for racing
+          const firstTwo = queueEntries.slice(0, 2);
+          const claimed = await claimPlayersForRace(firstTwo);
+          
+          if (claimed) {
+            await createMultiplayerRace(firstTwo);
+          } else {
+            console.log('[Multiplayer] ⚠️ Race already claimed by another client');
+          }
+        } else if (myIndex === 1) {
+          console.log('[Multiplayer] Waiting for first player to start race...');
         }
       }
 
@@ -320,25 +332,51 @@
     }
   }
 
+  async function claimPlayersForRace(queueEntries) {
+    try {
+      // Try to atomically update both entries to "matching" status
+      // This prevents race conditions where multiple clients try to match the same players
+      
+      const ids = queueEntries.map(e => e.id);
+      
+      const { data, error } = await supabase
+        .from('race_queue')
+        .update({ status: 'matching' })
+        .in('id', ids)
+        .eq('status', 'waiting') // Only update if still waiting
+        .select();
+
+      if (error) {
+        console.error('[Multiplayer] Error claiming players:', error);
+        return false;
+      }
+
+      // Check if we successfully claimed both players
+      if (data && data.length === 2) {
+        console.log('[Multiplayer] ✅ Successfully claimed both players for race');
+        return true;
+      } else {
+        console.log('[Multiplayer] ⚠️ Could only claim', data?.length || 0, 'players (expected 2)');
+        return false;
+      }
+
+    } catch (error) {
+      console.error('[Multiplayer] Error in claimPlayersForRace:', error);
+      return false;
+    }
+  }
+
   async function createMultiplayerRace(queueEntries) {
     try {
-      // Stop checking for more matches
+      console.log('[Multiplayer] Creating race with', queueEntries.length, 'players');
+
+      // Start the race simulation (this will handle queue cleanup)
+      await startMultiplayerRaceSimulation(queueEntries);
+
+      // Stop checking for more matches (after race is created)
       if (multiplayerState.matchCheckInterval) {
         clearInterval(multiplayerState.matchCheckInterval);
         multiplayerState.matchCheckInterval = null;
-      }
-
-      console.log('[Multiplayer] Creating race with', queueEntries.length, 'players');
-
-      // TODO: For now, we'll simulate the race client-side
-      // In production, this should be done server-side
-
-      // Mark queue entries as matched
-      for (const entry of queueEntries) {
-        await supabase
-          .from('race_queue')
-          .update({ status: 'matched' })
-          .eq('id', entry.id);
       }
 
       // Clean up our queue state
@@ -346,11 +384,17 @@
       multiplayerState.queueEntryId = null;
       hideQueueStatus();
 
-      // Start the race with both players' horses
-      startMultiplayerRaceSimulation(queueEntries);
-
     } catch (error) {
       console.error('[Multiplayer] Error creating race:', error);
+      
+      // Reset queue entries back to waiting on error
+      for (const entry of queueEntries) {
+        await supabase
+          .from('race_queue')
+          .update({ status: 'waiting' })
+          .eq('id', entry.id);
+      }
+      
       alert('Failed to create multiplayer race. Please try again.');
     }
   }
@@ -517,7 +561,7 @@
       .select('*')
       .eq('player_id', playerId)
       .eq('name', horseData.name)
-      .single();
+      .maybeSingle(); // Use maybeSingle() instead of single() to avoid 406 errors
 
     if (error && error.code !== 'PGRST116') {
       throw error;
