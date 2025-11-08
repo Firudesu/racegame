@@ -2454,8 +2454,8 @@
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // INCREASED DRAIN: Matches multiplayer intensity (3.5x more aggressive)
-  const staminaDrain = Math.max(0.05, (0.25 + stats.stride / 200 - stats.endurance / 300) * 3.5);
+    // BALANCED DRAIN: Tuned for close finishes (finish with 5-25% energy)
+  const staminaDrain = Math.max(0.05, (0.25 + stats.stride / 200 - stats.endurance / 300) * 2.8);
 
     const racerObj = {
       id,
@@ -3057,12 +3057,12 @@
 
       if (sampleRng(race) < chance) {
         skill.active = true;
-        // LONGER DURATION: 1.5x longer (matches multiplayer)
-        skill.timer = (skill.duration || 3) * 1.5;
+        // LONGER DURATION: 1.8x longer for more impact
+        skill.timer = (skill.duration || 4) * 1.8;
         skill.used = true;
-        racer.skillToast = { name: skill.name, timer: 1.5 };
+        racer.skillToast = { name: skill.name, timer: 2.5 }; // Show toast longer!
         racer.skillLog.push({ name: skill.name, time: race.time, phase });
-        console.log(`%c⚡ Skill Activated%c ${racer.name} used ${skill.name} for ${skill.timer.toFixed(1)}s!`, "color:#ffd700; font-weight:bold;", "color:#d0d3e8");
+        console.log(`%c⚡ SKILL ACTIVATED%c ${racer.name} used ${skill.name} (+${Math.round(skill.boost * 220)}% speed for ${skill.timer.toFixed(1)}s)`, "color:#ffd700; font-weight:bold; font-size:1.1em;", "color:#d0d3e8");
       }
     });
   }
@@ -3083,8 +3083,8 @@
       if (skill.timer > 0) {
         const effect = skill.effect || {};
         if (typeof skill.boost === "number") {
-          // POWERED UP: Skills are 2.5x stronger (matches multiplayer)
-          const enhancedBoost = skill.boost * 2.5;
+          // BALANCED: Skills are 2.2x stronger for competitive races
+          const enhancedBoost = skill.boost * 2.2;
           multiplier *= 1 + enhancedBoost;
         }
         if (skill.riskPenalty) {

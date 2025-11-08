@@ -849,15 +849,15 @@
             if (shouldTrigger && Math.random() < finalChance) {
               skill.used = true;
               skill.active = true;
-              // LONGER duration (5-8 seconds instead of 3!)
-              skill.timer = (skill.duration || 5) * 1.5;
+              // LONGER duration (1.8x instead of 1.5x for more impact)
+              skill.timer = (skill.duration || 4) * 1.8;
               console.log(`[Multiplayer] ⚡ ${racer.name} activated ${skill.name} for ${skill.timer.toFixed(1)}s!`);
             }
             
             if (skill.active && skill.timer > 0) {
-              // MUCH BIGGER boost (30-50% instead of 15%)!
+              // BALANCED boost for competitive races (2.2x instead of 2.5x)
               const rawBoost = skill.boost || 0.15;
-              const enhancedBoost = rawBoost * 2.5; // 2.5x more powerful!
+              const enhancedBoost = rawBoost * 2.2; // Strong but not overwhelming!
               skillBoost += enhancedBoost;
               skill.timer -= TRACK_STEP;
               
@@ -874,9 +874,9 @@
         // Move forward
         racer.distance += speed * TRACK_STEP;
         
-        // Drain stamina (AGGRESSIVE - horses should finish near empty!)
+        // Drain stamina (BALANCED for excitement - finish with 5-25% energy)
         const intensity = speed / baseSpeed;
-        let baseDrain = 3.5 * TRACK_STEP * intensity; // Very aggressive drain!
+        let baseDrain = 2.8 * TRACK_STEP * intensity; // Tuned for close finishes!
         
         // Apply paceControl from secondary stats (MAJOR impact!)
         const paceControl = racer.profile?.secondary?.paceControl || 60;
