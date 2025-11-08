@@ -1010,17 +1010,21 @@
     
     console.log('[Multiplayer] Saving horse with stats:', JSON.stringify(stats));
     
-    let { data: horse, error } = await supabase
+    // Find most recent horse by this player with this name
+    let { data: horses, error } = await supabase
       .from('horses')
       .select('*')
       .eq('player_id', playerId)
       .eq('name', horseData.name)
-      .maybeSingle();
+      .order('created_at', { ascending: false })
+      .limit(1);
 
     if (error) {
       console.error('[Multiplayer] Error fetching horse:', error);
       throw error;
     }
+    
+    const horse = horses && horses.length > 0 ? horses[0] : null;
 
     const horseRecord = {
       player_id: playerId,
