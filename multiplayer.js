@@ -513,36 +513,42 @@
     showNotification('🏁 Race starting! Simulating...');
 
     try {
-      // Create race record
+      // Simulate race first
+      const raceResults = simulateRace(queueEntries);
+      
+      // Extract player IDs
+      const playerIds = queueEntries.map(e => e.player_id);
+      
+      // Create race record with all data
       const { data: race, error: raceError } = await supabase
         .from('races')
         .insert({
           race_type: 'multiplayer',
-          race_distance: 1600, // Default distance
-          status: 'in_progress'
+          player_ids: playerIds,
+          status: 'completed', // Race is already simulated
+          race_config: {
+            distance: 1600,
+            participants: queueEntries.map(e => ({
+              player_id: e.player_id,
+              horse_id: e.horse_id,
+              horse_name: e.horse_data.name
+            }))
+          },
+          race_replay: raceResults.replayData,
+          winner_id: raceResults.winnerId,
+          results: raceResults.results,
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString()
         })
         .select()
         .single();
 
-      if (raceError) throw raceError;
+      if (raceError) {
+        console.error('[Multiplayer] Error creating race:', raceError);
+        throw raceError;
+      }
 
       console.log('[Multiplayer] Created race record:', race.id);
-
-      // Simulate race (client-side for now)
-      const raceResults = simulateRace(queueEntries);
-
-      // Save race replay data
-      const { error: updateError } = await supabase
-        .from('races')
-        .update({
-          replay_data: raceResults.replayData,
-          winner_id: raceResults.winnerId,
-          status: 'completed',
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', race.id);
-
-      if (updateError) throw updateError;
 
       // Save race participants
       for (let i = 0; i < queueEntries.length; i++) {
@@ -619,7 +625,7 @@
 
     return {
       results,
-      winnerId: results[0].horseId,
+      winnerId: results[0].playerId, // Should be player_id not horse_id for the winner_id FK
       replayData
     };
   }
