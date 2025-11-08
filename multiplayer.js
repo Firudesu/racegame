@@ -240,14 +240,15 @@
     console.log('[Multiplayer] horse.avatar?.stats:', horse.avatar?.stats);
 
     // Prepare horse data snapshot - handle different possible structures
+    // The horse from roster has stats nested in .avatar
     const horseData = {
       id: horse.id,
       name: horse.name,
-      image_url: horse.image_url || horse.image || horse.portrait,
-      stats: horse.stats || horse.avatar?.stats || {},
-      skills: horse.skills || horse.avatar?.skills || [],
-      style: horse.style || horse.avatar?.style || 'Pacer',
-      aptitudes: horse.aptitudes || horse.avatar?.aptitudes || {},
+      image_url: horse.image_url || horse.image || horse.portrait || horse.avatar?.portrait,
+      stats: horse.avatar?.stats || horse.stats || {},
+      skills: horse.avatar?.skills || horse.skills || [],
+      style: horse.avatar?.style || horse.style || 'Pacer',
+      aptitudes: horse.avatar?.aptitudes || horse.aptitudes || {},
       nft_token_id: horse.nft_token_id || horse.tokenId
     };
     
@@ -627,10 +628,17 @@
         // Skip AI racers (they don't have player_id)
         if (!result.playerId) continue;
         
+        // Find the original queue entry to get full horse data
+        const queueEntry = queueEntries.find(e => e.player_id === result.playerId);
+        
         const participantData = {
           race_id: race.id,
           player_id: result.playerId,
           horse_id: result.horseId,
+          horse_snapshot: queueEntry ? queueEntry.horse_data : {
+            name: result.horseName,
+            stats: result.stats || {}
+          },
           finish_position: result.position,
           finish_time: result.time,
           viewed: result.playerId === multiplayerState.currentPlayer?.id
