@@ -648,9 +648,93 @@
   }
 
   function simulateRace(queueEntries) {
-    // Simple simulation - create random race times
+    console.log('[Multiplayer] Running stats-based race simulation...');
+    
+    // Access the data helpers
+    const Data = window.ProjectStrideData;
+    if (!Data) {
+      console.error('[Multiplayer] ProjectStrideData not loaded!');
+      return fallbackRandomRace(queueEntries);
+    }
+
+    const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+    const seed = Date.now() + Math.random() * 1000;
+    const rng = Data.createSeededRng(seed);
+    
+    // Calculate race performance for each horse
+    const raceData = queueEntries.map((entry, index) => {
+      const horseData = entry.horse_data;
+      const stats = horseData.stats || {
+        stride: 50,
+        endurance: 50,
+        force: 50,
+        resolve: 50,
+        insight: 50
+      };
+      
+      // Calculate performance from stats (same as game logic)
+      const speed = clamp(Math.round(stats.stride * 0.65 + stats.force * 0.35), 25, 100);
+      const handling = clamp(Math.round(stats.resolve * 0.45 + stats.insight * 0.55), 25, 100);
+      const stamina = clamp(Math.round(stats.endurance * 0.7 + stats.resolve * 0.3), 25, 100);
+      
+      // Base time calculation (inversely proportional to speed)
+      // Good horse: ~85-95 seconds, Average: ~95-110 seconds, Poor: ~110-130 seconds
+      const baseTime = 180 - speed;
+      
+      // Stamina affects consistency (low stamina = more variance)
+      const staminaFactor = 1 - (stamina / 200);
+      const variance = (rng() - 0.5) * 20 * staminaFactor;
+      
+      // Handling affects passing/positioning (minor time benefit)
+      const handlingBonus = (handling - 60) / 10;
+      
+      // Skills provide bonuses
+      const skillBonus = (horseData.skills || []).length * 1.5;
+      
+      // Calculate final time
+      const finalTime = Math.max(75, baseTime + variance - handlingBonus - skillBonus);
+      
+      console.log(`[Multiplayer] ${horseData.name}: Speed=${speed}, Stamina=${stamina}, Time=${finalTime.toFixed(2)}s`);
+      
+      return {
+        playerId: entry.player_id,
+        horseId: entry.horse_id,
+        horseName: horseData.name,
+        time: finalTime,
+        position: 0,
+        stats: { speed, handling, stamina },
+        skills: horseData.skills || []
+      };
+    });
+
+    // Sort by time to determine positions
+    raceData.sort((a, b) => a.time - b.time);
+    raceData.forEach((r, i) => r.position = i + 1);
+
+    console.log('[Multiplayer] Race results:', raceData.map(r => `${r.position}. ${r.horseName} - ${r.time.toFixed(2)}s`));
+
+    return {
+      results: raceData,
+      winnerId: raceData[0].playerId,
+      replayData: {
+        seed: seed,
+        racers: raceData.map((r, idx) => ({
+          id: `mp-${idx}`,
+          name: r.horseName,
+          color: idx === 0 ? '#64b5f6' : `hsl(${idx * 90}, 70%, 60%)`,
+          stats: queueEntries[idx].horse_data.stats,
+          skills: r.skills,
+          finishTime: r.time
+        }))
+      }
+    };
+  }
+
+  function fallbackRandomRace(queueEntries) {
+    console.warn('[Multiplayer] Using fallback random simulation');
+    
     const results = queueEntries.map((entry, index) => {
-      const baseTime = 90 + Math.random() * 15; // 90-105 seconds
+      const baseTime = 90 + Math.random() * 15;
       return {
         playerId: entry.player_id,
         horseId: entry.horse_id,
@@ -660,34 +744,13 @@
       };
     });
 
-    // Sort by time to determine positions
     results.sort((a, b) => a.time - b.time);
     results.forEach((r, i) => r.position = i + 1);
 
-    // Create replay data (frame-by-frame positions)
-    const replayData = {
-      duration: 10, // 10 seconds replay
-      frames: []
-    };
-
-    // Generate 100 frames of position data
-    for (let frame = 0; frame <= 100; frame++) {
-      const frameData = results.map((r, idx) => {
-        // Add some variation to make it interesting
-        const progress = (frame / 100) + (Math.random() * 0.02 - 0.01);
-        return {
-          horseId: r.horseId,
-          horseName: r.horseName,
-          position: Math.max(0, Math.min(1, progress + (idx * -0.02))) // Winner slightly ahead
-        };
-      });
-      replayData.frames.push(frameData);
-    }
-
     return {
       results,
-      winnerId: results[0].playerId, // Should be player_id not horse_id for the winner_id FK
-      replayData
+      winnerId: results[0].playerId,
+      replayData: { frames: [] }
     };
   }
 
