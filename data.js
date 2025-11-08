@@ -456,9 +456,64 @@
 
   function deriveSecondaryStats(stats, modifiers = {}, aptitudes = null) {
     // Derive secondary stats from primary stats
-    // This is a placeholder function - returns empty object for now
-    // Can be extended later with actual secondary stat calculations
-    return {};
+    const stride = clamp(stats.stride || 50, 0, 100);
+    const endurance = clamp(stats.endurance || 50, 0, 100);
+    const force = clamp(stats.force || 50, 0, 100);
+    const resolve = clamp(stats.resolve || 50, 0, 100);
+    const insight = clamp(stats.insight || 50, 0, 100);
+    
+    const secondaryBonus = modifiers.secondaryBonus || 0;
+    const baseMult = 1 + secondaryBonus;
+    
+    // Core racing mechanics
+    const maneuverBase = clamp(Math.round((force * 0.4 + insight * 0.6) * baseMult), 30, 98);
+    const passingPower = clamp(Math.round((maneuverBase * 0.7 + insight * 0.5) / 1.2 * baseMult), 35, 98);
+    const fatigueResistance = clamp(Math.round((resolve * 0.6 + endurance * 0.4) * baseMult), 35, 95);
+    const paceControl = clamp(Math.round((endurance * 0.55 + insight * 0.45) * baseMult), 35, 95);
+    
+    // Stamina and recovery
+    const staminaEfficiency = clamp(1 - (endurance - 60) / 250, 0.65, 1.15);
+    const coolRecoveryRate = clamp((resolve + endurance) / 400, 0.01, 0.08);
+    
+    // Skill and tactical
+    const skillProc = clamp(Math.round((insight * 0.6 + resolve * 0.4) * baseMult), 35, 95);
+    const tacticalInstinct = clamp(Math.round((insight * 0.7 + stride * 0.3) * baseMult), 35, 95);
+    
+    // Aggression and positioning
+    const aggression = clamp(Math.round((force + stride) / 2 * baseMult), 35, 95);
+    const zoneDecisionFactor = clamp(1 - (insight - 55) / 180, 0.55, 1.25);
+    
+    // Phase power (start, middle, final)
+    const phasePower = {
+      start: clamp(Math.round((stride * 0.7 + force * 0.3) * baseMult), 35, 95),
+      middle: clamp(Math.round((endurance * 0.6 + paceControl * 0.4 / baseMult) * baseMult), 35, 95),
+      final: clamp(Math.round((resolve * 0.6 + force * 0.4) * baseMult), 35, 95)
+    };
+    
+    // Lane positioning preference
+    let preferredLane = 'mid';
+    if (passingPower >= 75) preferredLane = 'inside';
+    else if (passingPower <= 55) preferredLane = 'outside';
+    
+    const positioning = {
+      preferred: preferredLane,
+      adaptability: clamp(Math.round((insight + resolve) / 2 * baseMult), 35, 95)
+    };
+    
+    return {
+      maneuverBase,
+      passingPower,
+      fatigueResistance,
+      paceControl,
+      staminaEfficiency,
+      coolRecoveryRate,
+      skillProc,
+      tacticalInstinct,
+      aggression,
+      zoneDecisionFactor,
+      phasePower,
+      positioning
+    };
   }
 
   window.ProjectStrideData = {

@@ -648,7 +648,7 @@
   }
 
   function simulateRace(queueEntries) {
-    console.log('[Multiplayer] Running stats-based race simulation...');
+    console.log('[Multiplayer] Running stats-based race simulation with 2 players + 2 AI...');
     
     // Access the data helpers
     const Data = window.ProjectStrideData;
@@ -661,8 +661,29 @@
     const seed = Date.now() + Math.random() * 1000;
     const rng = Data.createSeededRng(seed);
     
-    // Calculate race performance for each horse
-    const raceData = queueEntries.map((entry, index) => {
+    // Add 2 AI racers
+    const aiRacers = [];
+    for (let i = 0; i < 2; i++) {
+      const aiHorse = Data.createAIRacer(i, queueEntries[0].horse_data.stats, rng);
+      aiRacers.push({
+        player_id: null, // AI doesn't have player_id
+        horse_id: `ai-${i}`,
+        horse_data: {
+          name: aiHorse.name,
+          stats: aiHorse.stats,
+          skills: aiHorse.skills,
+          style: aiHorse.style
+        },
+        isAI: true
+      });
+    }
+    
+    // Combine players + AI = 4 total racers
+    const allEntries = [...queueEntries, ...aiRacers];
+    console.log('[Multiplayer] Racing with:', allEntries.map(e => e.horse_data.name).join(', '));
+    
+    // Calculate race performance for each horse (INCLUDING SECONDARY STATS!)
+    const raceData = allEntries.map((entry, index) => {
       const horseData = entry.horse_data;
       const stats = horseData.stats || {
         stride: 50,
@@ -672,29 +693,55 @@
         insight: 50
       };
       
-      // Calculate performance from stats (same as game logic)
+      // Calculate primary performance
       const speed = clamp(Math.round(stats.stride * 0.65 + stats.force * 0.35), 25, 100);
       const handling = clamp(Math.round(stats.resolve * 0.45 + stats.insight * 0.55), 25, 100);
       const stamina = clamp(Math.round(stats.endurance * 0.7 + stats.resolve * 0.3), 25, 100);
       
+      // Calculate SECONDARY stats (the real deal!)
+      const secondary = Data.deriveSecondaryStats(stats, {});
+      
       // Base time calculation (inversely proportional to speed)
-      // Good horse: ~85-95 seconds, Average: ~95-110 seconds, Poor: ~110-130 seconds
       const baseTime = 180 - speed;
       
-      // Stamina affects consistency (low stamina = more variance)
-      const staminaFactor = 1 - (stamina / 200);
+      // Stamina affects consistency using secondary fatigueResistance
+      const fatigueResist = secondary.fatigueResistance || 60;
+      const staminaFactor = 1 - (fatigueResist / 200);
       const variance = (rng() - 0.5) * 20 * staminaFactor;
       
-      // Handling affects passing/positioning (minor time benefit)
-      const handlingBonus = (handling - 60) / 10;
+      // Passing power and maneuver affect race time
+      const passingBonus = (secondary.passingPower - 60) / 15;
+      const maneuverBonus = (secondary.maneuverBase - 60) / 20;
+      
+      // Pace control affects energy efficiency = faster times
+      const paceBonus = (secondary.paceControl - 60) / 18;
+      
+      // Phase power bonuses
+      const phaseBonus = (
+        (secondary.phasePower.start - 60) / 30 +
+        (secondary.phasePower.middle - 60) / 30 +
+        (secondary.phasePower.final - 60) / 25
+      );
       
       // Skills provide bonuses
       const skillBonus = (horseData.skills || []).length * 1.5;
       
-      // Calculate final time
-      const finalTime = Math.max(75, baseTime + variance - handlingBonus - skillBonus);
+      // Aggression gives slight edge
+      const aggressionBonus = (secondary.aggression - 60) / 25;
       
-      console.log(`[Multiplayer] ${horseData.name}: Speed=${speed}, Stamina=${stamina}, Time=${finalTime.toFixed(2)}s`);
+      // Calculate final time with ALL factors
+      const finalTime = Math.max(75, 
+        baseTime + 
+        variance - 
+        passingBonus - 
+        maneuverBonus - 
+        paceBonus - 
+        phaseBonus - 
+        skillBonus -
+        aggressionBonus
+      );
+      
+      console.log(`[Multiplayer] ${horseData.name}: Speed=${speed}, Passing=${secondary.passingPower}, Pace=${secondary.paceControl}, Time=${finalTime.toFixed(2)}s`);
       
       return {
         playerId: entry.player_id,
@@ -702,7 +749,9 @@
         horseName: horseData.name,
         time: finalTime,
         position: 0,
+        isAI: entry.isAI || false,
         stats: { speed, handling, stamina },
+        secondary: secondary,
         skills: horseData.skills || []
       };
     });
@@ -711,20 +760,27 @@
     raceData.sort((a, b) => a.time - b.time);
     raceData.forEach((r, i) => r.position = i + 1);
 
-    console.log('[Multiplayer] Race results:', raceData.map(r => `${r.position}. ${r.horseName} - ${r.time.toFixed(2)}s`));
+    console.log('[Multiplayer] 🏁 Final Results:', raceData.map(r => 
+      `${r.position}. ${r.horseName}${r.isAI ? ' (AI)' : ''} - ${r.time.toFixed(2)}s`
+    ));
+
+    // Only save results for real players (not AI)
+    const playerResults = raceData.filter(r => !r.isAI);
 
     return {
-      results: raceData,
-      winnerId: raceData[0].playerId,
+      results: playerResults, // Only player results saved to DB
+      allResults: raceData, // Full results including AI for display
+      winnerId: playerResults[0].playerId,
       replayData: {
         seed: seed,
         racers: raceData.map((r, idx) => ({
-          id: `mp-${idx}`,
+          id: r.isAI ? r.horseId : `mp-${idx}`,
           name: r.horseName,
-          color: idx === 0 ? '#64b5f6' : `hsl(${idx * 90}, 70%, 60%)`,
-          stats: queueEntries[idx].horse_data.stats,
+          color: r.isAI ? '#ff6b6b' : (idx === 0 ? '#64b5f6' : `hsl(${idx * 90}, 70%, 60%)`),
+          stats: allEntries.find(e => e.horse_data.name === r.horseName)?.horse_data.stats,
           skills: r.skills,
-          finishTime: r.time
+          finishTime: r.time,
+          isAI: r.isAI
         }))
       }
     };
@@ -976,7 +1032,8 @@
       document.body.appendChild(replayModal);
     }
 
-    const results = raceData.replayData?.results || raceData.results || [];
+    // Use allResults if available (includes AI), otherwise fall back to results
+    const results = raceData.allResults || raceData.replayData?.results || raceData.results || [];
     
     replayModal.innerHTML = `
       <div style="max-width: 800px; width: 100%; background: linear-gradient(135deg, rgba(20, 20, 40, 0.95), rgba(40, 40, 80, 0.95)); border-radius: 24px; padding: 40px; border: 3px solid var(--accent);">
@@ -993,7 +1050,7 @@
                 </div>
                 <div>
                   <div style="font-size: 1.3em; font-weight: bold; margin-bottom: 4px;">
-                    ${r.horseName || `Horse ${i + 1}`}
+                    ${r.horseName || `Horse ${i + 1}`}${r.isAI ? ' <span style="font-size: 0.8em; opacity: 0.7;">(AI)</span>' : ''}
                   </div>
                   <div style="font-size: 0.9em; opacity: 0.7;">
                     Time: ${r.time ? r.time.toFixed(2) + 's' : 'N/A'}
