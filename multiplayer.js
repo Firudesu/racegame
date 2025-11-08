@@ -679,45 +679,28 @@
   }
 
   function simulateRace(queueEntries) {
-    console.log('[Multiplayer] Running stats-based race simulation with 2 players + 2 AI...');
+    console.log('[Multiplayer] Running FULL race simulation with 2 players + 2 AI...');
     
-    // Access the data helpers
+    // Access the data helpers and race simulation
     const Data = window.ProjectStrideData;
-    if (!Data) {
-      console.error('[Multiplayer] ProjectStrideData not loaded!');
+    const RaceSim = window.RaceSimulation;
+    
+    if (!Data || !RaceSim) {
+      console.error('[Multiplayer] Required modules not loaded!');
       return fallbackRandomRace(queueEntries);
     }
 
-    const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+    const clamp = Data.clamp;
     const seed = Date.now() + Math.random() * 1000;
     const rng = Data.createSeededRng(seed);
     
-    // Add 2 AI racers
-    const aiRacers = [];
-    for (let i = 0; i < 2; i++) {
-      const aiHorse = Data.createAIRacer(i, queueEntries[0].horse_data.stats, rng);
-      aiRacers.push({
-        player_id: null, // AI doesn't have player_id
-        horse_id: `ai-${i}`,
-        horse_data: {
-          name: aiHorse.name,
-          stats: aiHorse.stats,
-          skills: aiHorse.skills,
-          style: aiHorse.style
-        },
-        isAI: true
-      });
-    }
+    // Build racers using FULL race engine
+    const racers = [];
     
-    // Combine players + AI = 4 total racers
-    const allEntries = [...queueEntries, ...aiRacers];
-    console.log('[Multiplayer] Racing with:', allEntries.map(e => e.horse_data.name).join(', '));
-    
-    // Calculate race performance for each horse (INCLUDING SECONDARY STATS!)
-    const raceData = allEntries.map((entry, index) => {
+    // Build player racers
+    queueEntries.forEach((entry, index) => {
       const horseData = entry.horse_data;
       
-      // Ensure stats exist and have valid values
       const stats = {
         stride: Number(horseData.stats?.stride) || 50,
         endurance: Number(horseData.stats?.endurance) || 50,
@@ -726,115 +709,175 @@
         insight: Number(horseData.stats?.insight) || 50
       };
       
-      console.log(`[Multiplayer] ${horseData.name} stats:`, stats);
+      const profile = Data.buildRacingProfile(stats, {});
+      const secondary = Data.deriveSecondaryStats(stats, {}, profile.aptitudes);
       
-      // Calculate primary performance
-      const speed = clamp(Math.round(stats.stride * 0.65 + stats.force * 0.35), 25, 100);
-      const handling = clamp(Math.round(stats.resolve * 0.45 + stats.insight * 0.55), 25, 100);
-      const stamina = clamp(Math.round(stats.endurance * 0.7 + stats.resolve * 0.3), 25, 100);
+      const racer = RaceSim.buildRacer({
+        id: `mp-player-${index}`,
+        name: horseData.name,
+        color: index === 0 ? '#64b5f6' : '#7b61ff',
+        stats: stats,
+        skills: horseData.skills || [],
+        modifiers: {},
+        isPlayer: false, // All are AI-controlled in headless sim
+        style: horseData.style || 'Pacer',
+        mood: 70,
+        performance: profile.performance,
+        profile: profile,
+        aptitudes: profile.aptitudes
+      });
       
-      console.log(`[Multiplayer] ${horseData.name} performance: Speed=${speed}, Handling=${handling}, Stamina=${stamina}`);
+      racer.playerId = entry.player_id;
+      racer.horseId = entry.horse_id;
+      racer.isRealPlayer = true;
+      racers.push(racer);
+    });
+    
+    // Build AI racers
+    for (let i = 0; i < 2; i++) {
+      const aiHorse = Data.createAIRacer(i, queueEntries[0].horse_data.stats, rng);
       
-      // Calculate SECONDARY stats (the real deal!)
-      const secondary = Data.deriveSecondaryStats(stats, {});
+      const racer = RaceSim.buildRacer({
+        id: `mp-ai-${i}`,
+        name: aiHorse.name,
+        color: i === 0 ? '#ff6b6b' : '#ffa500',
+        stats: aiHorse.stats,
+        skills: aiHorse.skills,
+        modifiers: aiHorse.modifiers || {},
+        isPlayer: false,
+        style: aiHorse.style || 'Pacer',
+        mood: aiHorse.mood || 70,
+        performance: aiHorse.performance,
+        profile: aiHorse.profile,
+        aptitudes: aiHorse.aptitudes
+      });
       
-      console.log(`[Multiplayer] ${horseData.name} secondary:`, secondary);
+      racer.isAI = true;
+      racers.push(racer);
+    }
+    
+    console.log('[Multiplayer] Built', racers.length, 'racers:', racers.map(r => `${r.name} (${r.style})`).join(', '));
+    
+    // Apply race adjustments
+    racers.forEach(racer => {
+      racer.startAggro = rng();
+      const decisionFactor = clamp(racer.zoneDecisionFactorBase || 1, 0.5, 1.3);
+      racer.strategyCooldown = (0.3 + rng() * 0.5) * decisionFactor;
+      RaceSim.applyRacePerformanceAdjustments(racer, rng);
+    });
+    
+    // Assign lanes
+    RaceSim.assignInitialLanes(racers);
+    
+    // Create race state
+    const race = {
+      seed: seed,
+      rng: rng,
+      racers: racers,
+      time: 0,
+      running: true,
+      finishedOrder: [],
+      leaderboard: racers.slice()
+    };
+    
+    console.log('[Multiplayer] Starting FULL headless simulation...');
+    
+    // Run full simulation frame-by-frame
+    const TRACK_STEP = RaceSim.TRACK_STEP;
+    const TRACK_LENGTH = RaceSim.TRACK_LENGTH;
+    const MAX_RACE_TIME = 300; // 5 minutes max
+    const frames = []; // Capture replay data
+    
+    let frameCounter = 0;
+    while (race.time < MAX_RACE_TIME) {
+      // Check if all finished
+      const unfinished = race.racers.filter(r => !r.finished);
+      if (unfinished.length === 0) break;
       
-      // Base time calculation (inversely proportional to speed)
-      const baseTime = 180 - speed;
+      // Update race state manually (stepRacer for each horse)
+      race.racers.forEach(racer => {
+        if (!racer.finished) {
+          RaceSim.stepRacer(racer, TRACK_STEP, race);
+          
+          // Check if finished
+          if (racer.distance >= TRACK_LENGTH && !racer.finished) {
+            racer.finished = true;
+            racer.finishTime = race.time;
+            const finalEnergy = Math.round((racer.energy / racer.maxEnergy) * 100);
+            racer.energyHistory = racer.energyHistory || [];
+            racer.energyHistory.push({ time: race.time, energy: finalEnergy });
+            race.finishedOrder.push(racer);
+            console.log(`[Multiplayer] 🏁 ${racer.name} finished in ${racer.finishTime.toFixed(2)}s with ${finalEnergy}% energy`);
+          }
+        }
+      });
       
-      // Stamina affects consistency using secondary fatigueResistance
-      const fatigueResist = secondary.fatigueResistance || 60;
-      const staminaFactor = 1 - (fatigueResist / 200);
-      const variance = (rng() - 0.5) * 20 * staminaFactor;
+      race.time += TRACK_STEP;
       
-      // Passing power and maneuver affect race time
-      const passingBonus = (secondary.passingPower - 60) / 15;
-      const maneuverBonus = (secondary.maneuverBase - 60) / 20;
-      
-      // Pace control affects energy efficiency = faster times
-      const paceBonus = (secondary.paceControl - 60) / 18;
-      
-      // Phase power bonuses
-      const phaseBonus = (
-        (secondary.phasePower.start - 60) / 30 +
-        (secondary.phasePower.middle - 60) / 30 +
-        (secondary.phasePower.final - 60) / 25
-      );
-      
-      // Skills provide bonuses
-      const skillBonus = (horseData.skills || []).length * 1.5;
-      
-      // Aggression gives slight edge
-      const aggressionBonus = (secondary.aggression - 60) / 25;
-      
-      // Calculate final time with ALL factors
-      const finalTime = Math.max(75, 
-        baseTime + 
-        variance - 
-        passingBonus - 
-        maneuverBonus - 
-        paceBonus - 
-        phaseBonus - 
-        skillBonus -
-        aggressionBonus
-      );
-      
-      // Debug NaN
-      if (isNaN(finalTime)) {
-        console.error(`[Multiplayer] NaN detected for ${horseData.name}!`);
-        console.error('baseTime:', baseTime);
-        console.error('variance:', variance);
-        console.error('passingBonus:', passingBonus);
-        console.error('maneuverBonus:', maneuverBonus);
-        console.error('paceBonus:', paceBonus);
-        console.error('phaseBonus:', phaseBonus);
-        console.error('skillBonus:', skillBonus);
-        console.error('aggressionBonus:', aggressionBonus);
-        console.error('stats:', stats);
-        console.error('secondary:', secondary);
+      // Capture frame data every 10 steps (for replay)
+      if (frameCounter % 10 === 0) {
+        frames.push({
+          time: race.time,
+          racers: race.racers.map(r => ({
+            id: r.id,
+            distance: r.distance,
+            energy: r.energy,
+            speed: r.speed,
+            lane: r.lane,
+            phase: r.phase,
+            activeSkills: r.skills?.filter(s => s.active).map(s => s.name) || []
+          }))
+        });
       }
-      
-      console.log(`[Multiplayer] ${horseData.name}: Speed=${speed}, Passing=${secondary.passingPower}, Pace=${secondary.paceControl}, Time=${finalTime.toFixed(2)}s`);
-      
+      frameCounter++;
+    }
+    
+    console.log('[Multiplayer] Simulation complete! Race time:', race.time.toFixed(2), 'seconds');
+    console.log('[Multiplayer] Captured', frames.length, 'replay frames');
+    
+    // Collect results
+    const allResults = race.finishedOrder.map((racer, index) => {
       return {
-        playerId: entry.player_id,
-        horseId: entry.horse_id,
-        horseName: horseData.name,
-        time: finalTime,
-        position: 0,
-        isAI: entry.isAI || false,
-        stats: { speed, handling, stamina },
-        secondary: secondary,
-        skills: horseData.skills || []
+        playerId: racer.playerId || null,
+        horseId: racer.horseId || racer.id,
+        horseName: racer.name,
+        time: racer.finishTime || race.time,
+        position: index + 1,
+        isAI: racer.isAI || false,
+        finalEnergy: Math.round((racer.energy / racer.maxEnergy) * 100),
+        stats: {
+          speed: racer.performance?.speed || 50,
+          handling: racer.performance?.handling || 50,
+          stamina: Math.round((racer.energy / racer.maxEnergy) * 100)
+        },
+        skillsUsed: racer.skillLog || []
       };
     });
-
-    // Sort by time to determine positions
-    raceData.sort((a, b) => a.time - b.time);
-    raceData.forEach((r, i) => r.position = i + 1);
-
-    console.log('[Multiplayer] 🏁 Final Results:', raceData.map(r => 
-      `${r.position}. ${r.horseName}${r.isAI ? ' (AI)' : ''} - ${r.time.toFixed(2)}s`
+    
+    console.log('[Multiplayer] 🏁 Final Results:', allResults.map(r => 
+      `${r.position}. ${r.horseName}${r.isAI ? ' (AI)' : ''} - ${r.time.toFixed(2)}s (Energy: ${r.finalEnergy}%)`
     ));
-
-    // Only save results for real players (not AI)
-    const playerResults = raceData.filter(r => !r.isAI);
+    
+    // Only player results for database
+    const playerResults = allResults.filter(r => !r.isAI);
 
     return {
-      results: playerResults, // Only player results saved to DB
-      allResults: raceData, // Full results including AI for display
-      winnerId: playerResults[0].playerId,
+      results: playerResults,
+      allResults: allResults,
+      winnerId: playerResults[0]?.playerId || null,
       replayData: {
         seed: seed,
-        racers: raceData.map((r, idx) => ({
-          id: r.isAI ? r.horseId : `mp-${idx}`,
-          name: r.horseName,
-          color: r.isAI ? '#ff6b6b' : (idx === 0 ? '#64b5f6' : `hsl(${idx * 90}, 70%, 60%)`),
-          stats: allEntries.find(e => e.horse_data.name === r.horseName)?.horse_data.stats,
+        frames: frames,
+        racers: racers.map(r => ({
+          id: r.id,
+          name: r.name,
+          color: r.color,
+          style: r.style,
+          stats: r.stats,
           skills: r.skills,
-          finishTime: r.time,
-          isAI: r.isAI
+          isAI: r.isAI || false,
+          playerId: r.playerId || null,
+          horseId: r.horseId || r.id
         }))
       }
     };

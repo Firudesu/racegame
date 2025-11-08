@@ -3668,4 +3668,17 @@
 
     return { play };
   }
-})();
+  // Expose race simulation functions for multiplayer
+  window.RaceSimulation = {
+    buildRacer,
+    updateRace,
+    stepRacer,
+    applyRacePerformanceAdjustments,
+    assignInitialLanes,
+    TRACK_LENGTH,
+    TRACK_STEP,
+    START_PHASE_LIMIT,
+    FINAL_PHASE_START
+  };
+
+  })();
