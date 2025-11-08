@@ -1908,6 +1908,8 @@
         return;
       }
       
+      console.log('[updateAvatarProfile] Generated secondary stats:', profile.secondary);
+      
       state.avatar.profile = {
         performance: { ...profile.performance },
         aptitudes: profile.aptitudes ? deepClone(profile.aptitudes) : {},
@@ -1917,6 +1919,9 @@
       state.avatar.aptitudes = profile.aptitudes ? deepClone(profile.aptitudes) : {};
       state.avatar.secondary = profile.secondary ? deepClone(profile.secondary) : {};
       state.avatar.maneuverRating = profile.performance.maneuver;
+      
+      console.log('[updateAvatarProfile] Avatar secondary stats now:', state.avatar.secondary);
+      
       if (persist) {
         Storage.saveCurrentAvatar(state.avatar);
       }

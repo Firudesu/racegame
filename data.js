@@ -448,10 +448,11 @@
       };
     }
 
-    function buildRacingProfile(stats) {
+    function buildRacingProfile(stats, modifiers = {}) {
       const performance = derivePerformance(stats);
       const aptitudes = deriveAptitudes(stats, performance);
-      return { performance, aptitudes };
+      const secondary = deriveSecondaryStats(stats, modifiers, aptitudes);
+      return { performance, aptitudes, secondary };
     }
 
   function deriveSecondaryStats(stats, modifiers = {}, aptitudes = null) {
