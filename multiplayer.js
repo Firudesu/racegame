@@ -903,6 +903,13 @@
     // Check if horse already exists
     const horseId = horseData.id || horseData.tokenId || horseData.name;
     
+    // Extract stats from wherever they are
+    const stats = horseData.avatar?.stats || horseData.stats || {};
+    const skills = horseData.avatar?.skills || horseData.skills || [];
+    const style = horseData.avatar?.style || horseData.style || 'Pacer';
+    
+    console.log('[Multiplayer] Saving horse with stats:', JSON.stringify(stats));
+    
     let { data: horse, error } = await supabase
       .from('horses')
       .select('*')
@@ -914,24 +921,38 @@
       throw error;
     }
 
+    const horseRecord = {
+      player_id: playerId,
+      wallet_address: walletAddress,
+      name: horseData.name,
+      image_url: horseData.image || horseData.portrait || horseData.avatar?.portrait || null,
+      nft_token_id: horseData.tokenId || horseData.nft_token_id || null,
+      stats: stats
+    };
+
     // Create or update horse
     if (!horse) {
       const { data: newHorse, error: insertError } = await supabase
         .from('horses')
-        .insert({
-          player_id: playerId,
-          wallet_address: walletAddress,
-          name: horseData.name,
-          image_url: horseData.image || horseData.portrait || null,
-          nft_token_id: horseData.tokenId || null,
-          stats: horseData.stats || {}
-        })
+        .insert(horseRecord)
         .select()
         .single();
 
       if (insertError) throw insertError;
       horse = newHorse;
-      console.log('[Multiplayer] ✅ Saved horse to database:', horse.id);
+      console.log('[Multiplayer] ✅ Saved NEW horse to database:', horse.id, 'with stats:', JSON.stringify(horse.stats));
+    } else {
+      // Update existing horse with latest stats
+      const { data: updatedHorse, error: updateError } = await supabase
+        .from('horses')
+        .update(horseRecord)
+        .eq('id', horse.id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+      horse = updatedHorse;
+      console.log('[Multiplayer] ✅ Updated horse in database:', horse.id, 'with stats:', JSON.stringify(horse.stats));
     }
 
     return horse;
