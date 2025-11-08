@@ -2454,7 +2454,8 @@
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    const staminaDrain = Math.max(0.05, 0.25 + stats.stride / 200 - stats.endurance / 300);
+    // INCREASED DRAIN: Matches multiplayer intensity (3.5x more aggressive)
+  const staminaDrain = Math.max(0.05, (0.25 + stats.stride / 200 - stats.endurance / 300) * 3.5);
 
     const racerObj = {
       id,
@@ -3056,10 +3057,12 @@
 
       if (sampleRng(race) < chance) {
         skill.active = true;
-        skill.timer = skill.duration;
+        // LONGER DURATION: 1.5x longer (matches multiplayer)
+        skill.timer = (skill.duration || 3) * 1.5;
         skill.used = true;
         racer.skillToast = { name: skill.name, timer: 1.5 };
         racer.skillLog.push({ name: skill.name, time: race.time, phase });
+        console.log(`%c⚡ Skill Activated%c ${racer.name} used ${skill.name} for ${skill.timer.toFixed(1)}s!`, "color:#ffd700; font-weight:bold;", "color:#d0d3e8");
       }
     });
   }
@@ -3080,7 +3083,9 @@
       if (skill.timer > 0) {
         const effect = skill.effect || {};
         if (typeof skill.boost === "number") {
-          multiplier *= 1 + skill.boost;
+          // POWERED UP: Skills are 2.5x stronger (matches multiplayer)
+          const enhancedBoost = skill.boost * 2.5;
+          multiplier *= 1 + enhancedBoost;
         }
         if (skill.riskPenalty) {
           handlingPenalty *= 0.85;
