@@ -283,6 +283,8 @@
     // Add a small random delay to prevent all clients from checking at exactly the same time
     const randomDelay = Math.random() * 1000; // 0-1 second random delay
     
+    console.log(`[Multiplayer] Starting match checking in ${randomDelay.toFixed(0)}ms...`);
+    
     setTimeout(() => {
       // Check for matches every 3 seconds
       multiplayerState.matchCheckInterval = setInterval(checkForMatch, 3000);
@@ -325,10 +327,14 @@
           if (claimed) {
             await createMultiplayerRace(firstTwo);
           } else {
-            console.log('[Multiplayer] ⚠️ Race already claimed by another client');
+            console.log('[Multiplayer] ⚠️ Race already claimed, will recheck queue in next cycle');
+            // Don't do anything - let the interval naturally recheck
+            // The other client successfully claimed and will start the race
           }
         } else if (myIndex === 1) {
           console.log('[Multiplayer] Waiting for first player to start race...');
+        } else {
+          console.log('[Multiplayer] Position in queue:', myIndex + 1);
         }
       }
 
