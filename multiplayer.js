@@ -685,21 +685,29 @@
     // Calculate race performance for each horse (INCLUDING SECONDARY STATS!)
     const raceData = allEntries.map((entry, index) => {
       const horseData = entry.horse_data;
-      const stats = horseData.stats || {
-        stride: 50,
-        endurance: 50,
-        force: 50,
-        resolve: 50,
-        insight: 50
+      
+      // Ensure stats exist and have valid values
+      const stats = {
+        stride: Number(horseData.stats?.stride) || 50,
+        endurance: Number(horseData.stats?.endurance) || 50,
+        force: Number(horseData.stats?.force) || 50,
+        resolve: Number(horseData.stats?.resolve) || 50,
+        insight: Number(horseData.stats?.insight) || 50
       };
+      
+      console.log(`[Multiplayer] ${horseData.name} stats:`, stats);
       
       // Calculate primary performance
       const speed = clamp(Math.round(stats.stride * 0.65 + stats.force * 0.35), 25, 100);
       const handling = clamp(Math.round(stats.resolve * 0.45 + stats.insight * 0.55), 25, 100);
       const stamina = clamp(Math.round(stats.endurance * 0.7 + stats.resolve * 0.3), 25, 100);
       
+      console.log(`[Multiplayer] ${horseData.name} performance: Speed=${speed}, Handling=${handling}, Stamina=${stamina}`);
+      
       // Calculate SECONDARY stats (the real deal!)
       const secondary = Data.deriveSecondaryStats(stats, {});
+      
+      console.log(`[Multiplayer] ${horseData.name} secondary:`, secondary);
       
       // Base time calculation (inversely proportional to speed)
       const baseTime = 180 - speed;
@@ -740,6 +748,21 @@
         skillBonus -
         aggressionBonus
       );
+      
+      // Debug NaN
+      if (isNaN(finalTime)) {
+        console.error(`[Multiplayer] NaN detected for ${horseData.name}!`);
+        console.error('baseTime:', baseTime);
+        console.error('variance:', variance);
+        console.error('passingBonus:', passingBonus);
+        console.error('maneuverBonus:', maneuverBonus);
+        console.error('paceBonus:', paceBonus);
+        console.error('phaseBonus:', phaseBonus);
+        console.error('skillBonus:', skillBonus);
+        console.error('aggressionBonus:', aggressionBonus);
+        console.error('stats:', stats);
+        console.error('secondary:', secondary);
+      }
       
       console.log(`[Multiplayer] ${horseData.name}: Speed=${speed}, Passing=${secondary.passingPower}, Pace=${secondary.paceControl}, Time=${finalTime.toFixed(2)}s`);
       
