@@ -234,15 +234,21 @@
 
   async function joinRaceQueue(playerId, walletAddress, horse) {
     console.log('[Multiplayer] Joining race queue...');
+    console.log('[Multiplayer] Horse data being queued:', horse);
 
-    // Prepare horse data snapshot
+    // Prepare horse data snapshot - handle different possible structures
     const horseData = {
       id: horse.id,
       name: horse.name,
-      image_url: horse.image_url,
-      stats: horse.stats,
-      nft_token_id: horse.nft_token_id
+      image_url: horse.image_url || horse.image || horse.portrait,
+      stats: horse.stats || horse.avatar?.stats || {},
+      skills: horse.skills || horse.avatar?.skills || [],
+      style: horse.style || horse.avatar?.style || 'Pacer',
+      aptitudes: horse.aptitudes || horse.avatar?.aptitudes || {},
+      nft_token_id: horse.nft_token_id || horse.tokenId
     };
+    
+    console.log('[Multiplayer] Formatted horse_data with stats:', horseData.stats);
 
     // Insert into queue
     const { data, error } = await supabase
@@ -611,21 +617,27 @@
 
       console.log('[Multiplayer] Created race record:', race.id);
 
-      // Save race participants
-      for (let i = 0; i < queueEntries.length; i++) {
-        const entry = queueEntries[i];
+      // Save race participants (only real players, not AI)
+      for (let i = 0; i < raceResults.results.length; i++) {
         const result = raceResults.results[i];
         
-        await supabase
+        // Skip AI racers (they don't have player_id)
+        if (!result.playerId) continue;
+        
+        const { error: participantError } = await supabase
           .from('race_participants')
           .insert({
             race_id: race.id,
-            player_id: entry.player_id,
-            horse_id: entry.horse_id,
+            player_id: result.playerId,
+            horse_id: result.horseId,
             finish_position: result.position,
             finish_time: result.time,
-            viewed: entry.player_id === multiplayerState.currentPlayer?.id // Mark as viewed for current player
+            viewed: result.playerId === multiplayerState.currentPlayer?.id // Mark as viewed for current player
           });
+        
+        if (participantError) {
+          console.error('[Multiplayer] Error saving participant:', participantError);
+        }
       }
 
       console.log('[Multiplayer] ✅ Race completed and saved');
