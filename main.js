@@ -135,6 +135,10 @@
       availableNFTs: [],
       lastFetch: 0
     };
+    
+    // Expose to window for multiplayer.js
+    window.walletState = walletState;
+    window.state = state;
 
     const trainingSession = {
       active: false,

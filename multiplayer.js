@@ -547,22 +547,35 @@
   }
 
   function getSelectedHorse() {
+    console.log('[Multiplayer] Getting selected horse...');
+    console.log('[Multiplayer] walletState:', window.walletState);
+    console.log('[Multiplayer] state.avatar:', window.state?.avatar);
+    
     // Try to get selected horse from the existing game state
     if (window.walletState && window.walletState.selectedId) {
       const roster = window.walletState.roster || [];
       const selected = roster.find(h => h.id === window.walletState.selectedId);
-      if (selected) return selected;
+      if (selected) {
+        console.log('[Multiplayer] ✅ Found selected horse from roster:', selected.name);
+        return selected;
+      }
     }
 
     // Fallback: try to get from state.avatar
     if (window.state && window.state.avatar) {
-      return {
+      const horseData = {
+        id: window.state.avatar.id || 'avatar-horse',
         name: window.state.avatar.name || 'My Horse',
         stats: window.state.avatar.stats || {},
-        image: window.state.avatar.portrait || 'assets/default_horse.svg'
+        image: window.state.avatar.portrait || window.state.avatar.image || 'assets/default_horse.svg',
+        portrait: window.state.avatar.portrait || window.state.avatar.image || 'assets/default_horse.svg',
+        tokenId: window.state.tokenId || null
       };
+      console.log('[Multiplayer] ✅ Found horse from state.avatar:', horseData.name);
+      return horseData;
     }
 
+    console.log('[Multiplayer] ❌ No horse found');
     return null;
   }
 
