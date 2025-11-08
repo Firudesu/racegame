@@ -353,6 +353,22 @@
     if (!multiplayerState.inQueue) return;
 
     try {
+      // First check if our queue entry still exists
+      const { data: myEntry, error: checkError } = await supabase
+        .from('race_queue')
+        .select('*')
+        .eq('id', multiplayerState.queueEntryId)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      // If our entry is gone or matched, the race must have started!
+      if (!myEntry || myEntry.status === 'matching' || myEntry.status === 'matched') {
+        console.log('[Multiplayer] 🎉 Queue entry matched! Checking for race results...');
+        await handleRaceStarted();
+        return;
+      }
+
       // Get all waiting players in queue
       const { data: queueEntries, error } = await supabase
         .from('race_queue')
@@ -368,7 +384,7 @@
       // Need at least 2 players to start a race
       if (queueEntries.length >= 2) {
         // Check if we're one of the first 2
-        const myEntry = queueEntries.find(e => e.id === multiplayerState.queueEntryId);
+        const myEntryInQueue = queueEntries.find(e => e.id === multiplayerState.queueEntryId);
         const myIndex = queueEntries.findIndex(e => e.id === multiplayerState.queueEntryId);
 
         if (myIndex === 0) {
@@ -395,6 +411,51 @@
 
     } catch (error) {
       console.error('[Multiplayer] Error checking for match:', error);
+    }
+  }
+
+  async function handleRaceStarted() {
+    console.log('[Multiplayer] Detected race started! Fetching results...');
+    
+    try {
+      // Stop checking for matches
+      if (multiplayerState.matchCheckInterval) {
+        clearInterval(multiplayerState.matchCheckInterval);
+        multiplayerState.matchCheckInterval = null;
+      }
+
+      // Clean up our queue state
+      multiplayerState.inQueue = false;
+      multiplayerState.queueEntryId = null;
+      hideQueueStatus();
+
+      // Wait a moment for Player 1 to finish creating the race
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Find the most recent race involving our player
+      const { data: recentRaces, error } = await supabase
+        .from('races')
+        .select('*')
+        .contains('player_ids', [multiplayerState.currentPlayer.id])
+        .eq('status', 'completed')
+        .order('completed_at', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      if (recentRaces && recentRaces.length > 0) {
+        const race = recentRaces[0];
+        console.log('[Multiplayer] Found race:', race.id);
+        
+        // Show the race results
+        await showRaceReplay(race.id, race);
+      } else {
+        console.log('[Multiplayer] No race found yet, showing notification...');
+        showNotification('🏁 Race completed! Check back in a moment.');
+      }
+
+    } catch (error) {
+      console.error('[Multiplayer] Error handling race start:', error);
     }
   }
 
