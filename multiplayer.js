@@ -828,28 +828,43 @@
         const styleBonus = getStyleMultiplier(racer.style, progress);
         const energyFactor = Math.max(0.4, staminaRatio);
         
-        // Skills boost (simplified)
+        // Skills boost (POWERFUL - can change race outcome!)
         let skillBoost = 1.0;
         if (racer.skills && racer.skills.length > 0) {
           // Trigger skills at appropriate phases
           racer.skills.forEach(skill => {
             if (skill.used) return;
+            
+            // Determine if skill should trigger
             const shouldTrigger = 
               (skill.trigger === 'start' && progress < 0.25) ||
               (skill.trigger === 'middle' && progress >= 0.25 && progress < 0.8) ||
               (skill.trigger === 'final' && progress >= 0.8);
             
-            if (shouldTrigger && Math.random() < 0.7) { // 70% activation chance
+            // Higher activation chance based on skillProc secondary stat
+            const skillProc = racer.profile?.secondary?.skillProc || 60;
+            const baseChance = 0.65 + (skillProc - 60) / 100; // 55-95% chance
+            const finalChance = clamp(baseChance, 0.55, 0.95);
+            
+            if (shouldTrigger && Math.random() < finalChance) {
               skill.used = true;
               skill.active = true;
-              skill.timer = skill.duration || 3;
-              console.log(`[Multiplayer] ⚡ ${racer.name} activated ${skill.name}!`);
+              // LONGER duration (5-8 seconds instead of 3!)
+              skill.timer = (skill.duration || 5) * 1.5;
+              console.log(`[Multiplayer] ⚡ ${racer.name} activated ${skill.name} for ${skill.timer.toFixed(1)}s!`);
             }
             
             if (skill.active && skill.timer > 0) {
-              skillBoost += (skill.boost || 0.15);
+              // MUCH BIGGER boost (30-50% instead of 15%)!
+              const rawBoost = skill.boost || 0.15;
+              const enhancedBoost = rawBoost * 2.5; // 2.5x more powerful!
+              skillBoost += enhancedBoost;
               skill.timer -= TRACK_STEP;
-              if (skill.timer <= 0) skill.active = false;
+              
+              if (skill.timer <= 0) {
+                skill.active = false;
+                console.log(`[Multiplayer] ${racer.name}'s ${skill.name} ended`);
+              }
             }
           });
         }
@@ -859,16 +874,27 @@
         // Move forward
         racer.distance += speed * TRACK_STEP;
         
-        // Drain stamina (MUCH more aggressive)
+        // Drain stamina (AGGRESSIVE - horses should finish near empty!)
         const intensity = speed / baseSpeed;
-        const baseDrain = 2.5 * TRACK_STEP * intensity; // Increased from 0.8 to 2.5
+        let baseDrain = 3.5 * TRACK_STEP * intensity; // Very aggressive drain!
         
-        // Apply paceControl from secondary stats
+        // Apply paceControl from secondary stats (MAJOR impact!)
         const paceControl = racer.profile?.secondary?.paceControl || 60;
-        const paceEfficiency = clamp(1 - (paceControl - 60) / 200, 0.8, 1.2);
-        const drain = baseDrain * paceEfficiency;
+        // Good paceControl (80+) can reduce drain by 30%!
+        const paceEfficiency = clamp(1 - (paceControl - 60) / 120, 0.7, 1.3);
         
+        // fatigueResistance also helps
+        const fatigueResist = racer.profile?.secondary?.fatigueResistance || 60;
+        const fatigueEfficiency = clamp(1 - (fatigueResist - 60) / 150, 0.75, 1.25);
+        
+        const drain = baseDrain * paceEfficiency * fatigueEfficiency;
         racer.energy = Math.max(0, racer.energy - drain);
+        
+        // If energy hits 0, MAJOR speed penalty!
+        if (racer.energy <= 0) {
+          energyFactor = 0.35; // 65% speed loss when exhausted!
+          console.log(`[Multiplayer] 💀 ${racer.name} is EXHAUSTED!`);
+        }
         
         // Check if finished
         if (racer.distance >= TRACK_LENGTH) {
