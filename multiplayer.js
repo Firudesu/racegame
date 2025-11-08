@@ -915,9 +915,10 @@
       .select('*')
       .eq('player_id', playerId)
       .eq('name', horseData.name)
-      .maybeSingle(); // Use maybeSingle() instead of single() to avoid 406 errors
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
+      console.error('[Multiplayer] Error fetching horse:', error);
       throw error;
     }
 
@@ -948,11 +949,16 @@
         .update(horseRecord)
         .eq('id', horse.id)
         .select()
-        .single();
+        .maybeSingle();
 
-      if (updateError) throw updateError;
-      horse = updatedHorse;
-      console.log('[Multiplayer] ✅ Updated horse in database:', horse.id, 'with stats:', JSON.stringify(horse.stats));
+      if (updateError) {
+        console.error('[Multiplayer] Error updating horse:', updateError);
+        // Even if update fails, use the existing horse record
+        console.log('[Multiplayer] Using existing horse record:', horse.id);
+      } else if (updatedHorse) {
+        horse = updatedHorse;
+        console.log('[Multiplayer] ✅ Updated horse in database:', horse.id, 'with stats:', JSON.stringify(horse.stats));
+      }
     }
 
     return horse;
