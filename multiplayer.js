@@ -409,31 +409,61 @@
       // First, check current status of these entries
       const { data: checkData } = await supabase
         .from('race_queue')
-        .select('id, status')
+        .select('*')
         .in('id', ids);
       
-      console.log('[Multiplayer] Current status before claim:', checkData);
+      console.log('[Multiplayer] Current entries before claim:', checkData);
       
-      const { data, error } = await supabase
-        .from('race_queue')
-        .update({ status: 'matching' })
-        .in('id', ids)
-        .eq('status', 'waiting') // Only update if still waiting
-        .select();
-
-      if (error) {
-        console.error('[Multiplayer] Error claiming players:', error);
+      // Count how many are actually waiting
+      const waitingCount = checkData?.filter(e => e.status === 'waiting').length || 0;
+      console.log('[Multiplayer] Entries with status=waiting:', waitingCount);
+      
+      if (waitingCount !== 2) {
+        console.log('[Multiplayer] Not all entries are waiting, aborting claim');
         return false;
       }
+      
+      // Try updating each one individually to see which fails
+      let claimedCount = 0;
+      const claimedIds = [];
+      
+      for (const id of ids) {
+        const { data: updateData, error: updateError } = await supabase
+          .from('race_queue')
+          .update({ status: 'matching' })
+          .eq('id', id)
+          .eq('status', 'waiting')
+          .select();
+        
+        if (!updateError && updateData && updateData.length > 0) {
+          claimedCount++;
+          claimedIds.push(id);
+          console.log('[Multiplayer] ✅ Claimed player:', id);
+        } else {
+          console.log('[Multiplayer] ❌ Failed to claim player:', id, updateError);
+        }
+      }
 
-      console.log('[Multiplayer] Claim result:', data);
+      console.log('[Multiplayer] Total claimed:', claimedCount, '/', ids.length);
 
       // Check if we successfully claimed both players
-      if (data && data.length === 2) {
+      if (claimedCount === 2) {
         console.log('[Multiplayer] ✅ Successfully claimed both players for race');
         return true;
       } else {
-        console.log('[Multiplayer] ⚠️ Could only claim', data?.length || 0, 'players (expected 2)');
+        console.log('[Multiplayer] ⚠️ Could only claim', claimedCount, 'players (expected 2)');
+        
+        // Rollback partial claims
+        if (claimedCount > 0) {
+          console.log('[Multiplayer] Rolling back partial claim...');
+          for (const id of claimedIds) {
+            await supabase
+              .from('race_queue')
+              .update({ status: 'waiting' })
+              .eq('id', id);
+          }
+        }
+        
         return false;
       }
 
