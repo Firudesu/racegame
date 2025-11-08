@@ -156,6 +156,12 @@
   async function handleMultiplayerRace() {
     console.log('[Multiplayer] Joining multiplayer queue');
 
+    // Check if already in queue
+    if (multiplayerState.inQueue) {
+      console.log('[Multiplayer] Already in queue, ignoring duplicate click');
+      return;
+    }
+
     // Check if user has a wallet connected
     const walletState = window.walletState || {};
     const walletAddress = walletState.address || localStorage.getItem('projectStrideWallet');
@@ -177,6 +183,17 @@
       const player = await getOrCreatePlayer(walletAddress);
       multiplayerState.currentPlayer = player;
 
+      // Check if this player already has a queue entry
+      const existingEntry = await checkExistingQueueEntry(player.id);
+      if (existingEntry) {
+        console.log('[Multiplayer] Already in queue, reusing existing entry');
+        multiplayerState.inQueue = true;
+        multiplayerState.queueEntryId = existingEntry.id;
+        showQueueStatus();
+        startMatchChecking();
+        return;
+      }
+
       // Save horse to database if not already there
       const horse = await saveHorseToDatabase(selectedHorse, player.id, walletAddress);
 
@@ -192,6 +209,26 @@
     } catch (error) {
       console.error('[Multiplayer] Error joining queue:', error);
       alert('Failed to join multiplayer queue. Please try again.');
+    }
+  }
+
+  async function checkExistingQueueEntry(playerId) {
+    try {
+      const { data, error } = await supabase
+        .from('race_queue')
+        .select('*')
+        .eq('player_id', playerId)
+        .eq('status', 'waiting')
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('[Multiplayer] Error checking existing queue entry:', error);
+      return null;
     }
   }
 
@@ -263,15 +300,33 @@
 
   function showQueueStatus() {
     const queueStatus = document.getElementById('queue-status');
+    const multiBtn = document.getElementById('multiplayer-race-btn');
+    
     if (queueStatus) {
       queueStatus.style.display = 'block';
+    }
+    
+    // Disable multiplayer button while in queue
+    if (multiBtn) {
+      multiBtn.disabled = true;
+      multiBtn.style.opacity = '0.5';
+      multiBtn.style.cursor = 'not-allowed';
     }
   }
 
   function hideQueueStatus() {
     const queueStatus = document.getElementById('queue-status');
+    const multiBtn = document.getElementById('multiplayer-race-btn');
+    
     if (queueStatus) {
       queueStatus.style.display = 'none';
+    }
+    
+    // Re-enable multiplayer button
+    if (multiBtn) {
+      multiBtn.disabled = false;
+      multiBtn.style.opacity = '1';
+      multiBtn.style.cursor = 'pointer';
     }
   }
 
