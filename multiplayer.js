@@ -235,6 +235,9 @@
   async function joinRaceQueue(playerId, walletAddress, horse) {
     console.log('[Multiplayer] Joining race queue...');
     console.log('[Multiplayer] Horse data being queued:', horse);
+    console.log('[Multiplayer] horse.stats:', horse.stats);
+    console.log('[Multiplayer] horse.avatar:', horse.avatar);
+    console.log('[Multiplayer] horse.avatar?.stats:', horse.avatar?.stats);
 
     // Prepare horse data snapshot - handle different possible structures
     const horseData = {
@@ -248,7 +251,7 @@
       nft_token_id: horse.nft_token_id || horse.tokenId
     };
     
-    console.log('[Multiplayer] Formatted horse_data with stats:', horseData.stats);
+    console.log('[Multiplayer] Formatted horse_data with stats:', JSON.stringify(horseData.stats));
 
     // Insert into queue
     const { data, error } = await supabase
@@ -624,19 +627,27 @@
         // Skip AI racers (they don't have player_id)
         if (!result.playerId) continue;
         
+        const participantData = {
+          race_id: race.id,
+          player_id: result.playerId,
+          horse_id: result.horseId,
+          finish_position: result.position,
+          finish_time: result.time,
+          viewed: result.playerId === multiplayerState.currentPlayer?.id
+        };
+        
+        console.log('[Multiplayer] Saving participant:', participantData);
+        
         const { error: participantError } = await supabase
           .from('race_participants')
-          .insert({
-            race_id: race.id,
-            player_id: result.playerId,
-            horse_id: result.horseId,
-            finish_position: result.position,
-            finish_time: result.time,
-            viewed: result.playerId === multiplayerState.currentPlayer?.id // Mark as viewed for current player
-          });
+          .insert(participantData);
         
         if (participantError) {
-          console.error('[Multiplayer] Error saving participant:', participantError);
+          console.error('[Multiplayer] ❌ Error saving participant for', result.horseName);
+          console.error('[Multiplayer] Error details:', JSON.stringify(participantError));
+          console.error('[Multiplayer] Failed data:', participantData);
+        } else {
+          console.log('[Multiplayer] ✅ Saved participant for', result.horseName);
         }
       }
 
