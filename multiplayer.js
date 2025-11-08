@@ -586,7 +586,7 @@
       // Extract player IDs
       const playerIds = queueEntries.map(e => e.player_id);
       
-      // Create race record with all data
+      // Create race record with all data (including AI results!)
       const { data: race, error: raceError } = await supabase
         .from('races')
         .insert({
@@ -603,7 +603,7 @@
           },
           race_replay: raceResults.replayData,
           winner_id: raceResults.winnerId,
-          results: raceResults.results,
+          results: raceResults.allResults, // Save ALL results including AI!
           started_at: new Date().toISOString(),
           completed_at: new Date().toISOString()
         })
@@ -1043,6 +1043,7 @@
 
   async function showRaceReplay(raceId, raceData) {
     console.log('[Multiplayer] Showing race replay:', raceId);
+    console.log('[Multiplayer] Race data:', raceData);
     
     // Create a modal overlay for the replay
     let replayModal = document.getElementById('race-replay-modal');
@@ -1068,7 +1069,10 @@
     }
 
     // Use allResults if available (includes AI), otherwise fall back to results
-    const results = raceData.allResults || raceData.replayData?.results || raceData.results || [];
+    // Results should now include AI when fetched from database!
+    const results = raceData.allResults || raceData.results || raceData.replayData?.results || [];
+    
+    console.log('[Multiplayer] Displaying', results.length, 'race results');
     
     replayModal.innerHTML = `
       <div style="max-width: 800px; width: 100%; background: linear-gradient(135deg, rgba(20, 20, 40, 0.95), rgba(40, 40, 80, 0.95)); border-radius: 24px; padding: 40px; border: 3px solid var(--accent);">
