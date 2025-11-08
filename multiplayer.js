@@ -678,6 +678,21 @@
     }
   }
 
+  function getStyleMultiplier(style, progress) {
+    // progress: 0-1 (0 = start, 1 = finish)
+    if (progress < 0.25) { // Start phase
+      if (style === 'Leader') return 1.15;
+      return 1.0;
+    } else if (progress < 0.8) { // Middle phase
+      if (style === 'Pacer') return 1.05;
+      return 1.0;
+    } else { // Final phase
+      if (style === 'Chaser') return 1.20;
+      if (style === 'Sprinter') return 1.18;
+      return 1.0;
+    }
+  }
+
   function simulateRace(queueEntries) {
     console.log('[Multiplayer] Running FULL race simulation with 2 players + 2 AI...');
     
@@ -794,21 +809,63 @@
       const unfinished = race.racers.filter(r => !r.finished);
       if (unfinished.length === 0) break;
       
-      // Update race state manually (stepRacer for each horse)
+      // Simplified race update - just move horses forward based on stats
       race.racers.forEach(racer => {
-        if (!racer.finished) {
-          RaceSim.stepRacer(racer, TRACK_STEP, race);
-          
-          // Check if finished
-          if (racer.distance >= TRACK_LENGTH && !racer.finished) {
-            racer.finished = true;
-            racer.finishTime = race.time;
-            const finalEnergy = Math.round((racer.energy / racer.maxEnergy) * 100);
-            racer.energyHistory = racer.energyHistory || [];
-            racer.energyHistory.push({ time: race.time, energy: finalEnergy });
-            race.finishedOrder.push(racer);
-            console.log(`[Multiplayer] 🏁 ${racer.name} finished in ${racer.finishTime.toFixed(2)}s with ${finalEnergy}% energy`);
-          }
+        if (racer.finished) return;
+        
+        // Initialize distance if not set
+        if (!racer.distance) racer.distance = 0;
+        
+        // Calculate speed based on stats and stamina
+        const progress = racer.distance / TRACK_LENGTH;
+        const staminaRatio = racer.energy / racer.maxEnergy;
+        const baseSpeed = 3.2 + (racer.performance.speed * 0.05);
+        const styleBonus = getStyleMultiplier(racer.style, progress);
+        const energyFactor = Math.max(0.4, staminaRatio);
+        
+        // Skills boost (simplified)
+        let skillBoost = 1.0;
+        if (racer.skills && racer.skills.length > 0) {
+          // Trigger skills at appropriate phases
+          racer.skills.forEach(skill => {
+            if (skill.used) return;
+            const shouldTrigger = 
+              (skill.trigger === 'start' && progress < 0.25) ||
+              (skill.trigger === 'middle' && progress >= 0.25 && progress < 0.8) ||
+              (skill.trigger === 'final' && progress >= 0.8);
+            
+            if (shouldTrigger && Math.random() < 0.7) { // 70% activation chance
+              skill.used = true;
+              skill.active = true;
+              skill.timer = skill.duration || 3;
+              console.log(`[Multiplayer] ⚡ ${racer.name} activated ${skill.name}!`);
+            }
+            
+            if (skill.active && skill.timer > 0) {
+              skillBoost += (skill.boost || 0.15);
+              skill.timer -= TRACK_STEP;
+              if (skill.timer <= 0) skill.active = false;
+            }
+          });
+        }
+        
+        const speed = baseSpeed * styleBonus * energyFactor * skillBoost;
+        
+        // Move forward
+        racer.distance += speed * TRACK_STEP;
+        
+        // Drain stamina (more realistic)
+        const intensity = speed / baseSpeed;
+        const drain = 0.8 * TRACK_STEP * intensity;
+        racer.energy = Math.max(0, racer.energy - drain);
+        
+        // Check if finished
+        if (racer.distance >= TRACK_LENGTH) {
+          racer.finished = true;
+          racer.finishTime = race.time;
+          const finalEnergy = Math.round((racer.energy / racer.maxEnergy) * 100);
+          race.finishedOrder.push(racer);
+          console.log(`[Multiplayer] 🏁 ${racer.name} finished in ${racer.finishTime.toFixed(2)}s with ${finalEnergy}% energy`);
         }
       });
       
