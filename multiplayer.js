@@ -727,6 +727,9 @@
       const profile = Data.buildRacingProfile(stats, {});
       const secondary = Data.deriveSecondaryStats(stats, {}, profile.aptitudes);
       
+      // Add secondary to profile
+      profile.secondary = secondary;
+      
       const racer = RaceSim.buildRacer({
         id: `mp-player-${index}`,
         name: horseData.name,
@@ -741,6 +744,8 @@
         profile: profile,
         aptitudes: profile.aptitudes
       });
+      
+      console.log(`[Multiplayer] ${horseData.name} secondary stats:`, secondary);
       
       racer.playerId = entry.player_id;
       racer.horseId = entry.horse_id;
@@ -800,7 +805,7 @@
     // Run full simulation frame-by-frame
     const TRACK_STEP = RaceSim.TRACK_STEP;
     const TRACK_LENGTH = RaceSim.TRACK_LENGTH;
-    const MAX_RACE_TIME = 300; // 5 minutes max
+    const MAX_RACE_TIME = 500; // 8 minutes max to let slower horses finish
     const frames = []; // Capture replay data
     
     let frameCounter = 0;
@@ -854,9 +859,15 @@
         // Move forward
         racer.distance += speed * TRACK_STEP;
         
-        // Drain stamina (more realistic)
+        // Drain stamina (MUCH more aggressive)
         const intensity = speed / baseSpeed;
-        const drain = 0.8 * TRACK_STEP * intensity;
+        const baseDrain = 2.5 * TRACK_STEP * intensity; // Increased from 0.8 to 2.5
+        
+        // Apply paceControl from secondary stats
+        const paceControl = racer.profile?.secondary?.paceControl || 60;
+        const paceEfficiency = clamp(1 - (paceControl - 60) / 200, 0.8, 1.2);
+        const drain = baseDrain * paceEfficiency;
+        
         racer.energy = Math.max(0, racer.energy - drain);
         
         // Check if finished
