@@ -3409,21 +3409,40 @@
       ctx.fill();
     }
 
-    // Draw skill glow effect if skill is active
-    if (racer.skills.some((skill) => skill.active)) {
-      ctx.strokeStyle = "rgba(255,255,255,0.8)";
+    // ENHANCED: Skill glow effect - MORE VISIBLE!
+    const activeSkill = racer.skills?.find(s => s.active);
+    if (activeSkill) {
+      // Pulsing glow animation
+      const pulseIntensity = 0.6 + Math.sin(Date.now() / 100) * 0.4;
+      
+      // Outer glow ring
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 215, 0, ${pulseIntensity})`;
+      ctx.lineWidth = 4;
+      ctx.shadowColor = "#ffd700";
+      ctx.shadowBlur = 20;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, (avatarSize / 2) + 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      
+      // Inner highlight
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, (avatarSize / 2) + 3, 0, Math.PI * 2);
+      ctx.arc(pos.x, pos.y, (avatarSize / 2) + 2, 0, Math.PI * 2);
       ctx.stroke();
       
-      // Add glowing shadow
-      ctx.shadowColor = racer.color;
-      ctx.shadowBlur = 10;
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, (avatarSize / 2) + 3, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+      // Draw skill name above horse in GOLD
+      ctx.save();
+      ctx.font = "bold 13px sans-serif";
+      ctx.fillStyle = "#ffd700";
+      ctx.strokeStyle = "rgba(0,0,0,0.9)";
+      ctx.lineWidth = 3;
+      ctx.textAlign = "center";
+      ctx.strokeText(`⚡ ${activeSkill.name}`, pos.x, pos.y - avatarSize / 2 - 25);
+      ctx.fillText(`⚡ ${activeSkill.name}`, pos.x, pos.y - avatarSize / 2 - 25);
+      ctx.restore();
     }
 
     // Draw skill toast notification
