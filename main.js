@@ -2450,12 +2450,13 @@
       const secondaryProfile =
         baseProfile.secondary || deriveSecondaryStats(stats, effectiveModifiers, baseAptitudes);
     const maneuverAdjusted = applyStyleAdjustments(perfSource, useStyle);
-    const baseSpeed = Math.max(4, 3.2 + maneuverAdjusted.speed * 0.05);
+    // Reduced speed stat dominance for closer races
+    const baseSpeed = Math.max(4, 4.0 + maneuverAdjusted.speed * 0.03);
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // BALANCED DRAIN: Tuned for close finishes (finish with 5-25% energy)
-  const staminaDrain = Math.max(0.05, (0.25 + stats.stride / 200 - stats.endurance / 300) * 2.8);
+    // AGGRESSIVE DRAIN: Stamina is a strategic resource (finish with 0-20% energy)
+  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 5.0);
 
     const racerObj = {
       id,
@@ -2916,8 +2917,28 @@
     }
 
     const baseSpeed = racer.baseSpeed;
-    const styleMultiplier = getStylePhaseMultiplier(racer.style, phase);
+    let styleMultiplier = getStylePhaseMultiplier(racer.style, phase);
     const staminaRatio = Math.max(0, Math.min(1, racer.energy / racer.maxEnergy));
+    
+    // Racing style strategic bonuses
+    const rank = getRank(racer, race.leaderboard);
+    
+    // LEADER: Save stamina when ahead
+    if (racer.style === 'Leader' && rank === 1 && progress < 0.6) {
+      maintainCost *= 0.65; // 35% less drain when leading early!
+    }
+    
+    // PACER: Optimal stamina management
+    if (racer.style === 'Pacer' && staminaRatio > 0.4 && staminaRatio < 0.8) {
+      styleMultiplier *= 1.08; // +8% when managing well
+    }
+    
+    // CHASER: Burn stamina for final burst
+    if (racer.style === 'Chaser' && phase === 'final' && rank > 2) {
+      maintainCost *= 1.35; // Burn more stamina
+      styleMultiplier *= 1.12; // Get extra speed!
+    }
+    
       const paceControl = racer.secondary?.paceControl ?? 60;
       const paceEfficiency = clamp(1 + (paceControl - 60) / 220 * (1 - staminaRatio), 0.85, 1.25);
       const energyFactor = Math.max(0.4, staminaRatio) * paceEfficiency;
@@ -2992,7 +3013,7 @@
     const shieldFactor = racer.staminaShieldActive ?? racer.staminaShieldBase ?? 1;
     const focusDrainFactor = racer.focusDrainFactorActive ?? racer.focusDrainFactorBase ?? 1;
       const paceDrainFactor = clamp(1 - (paceControl - 60) / 260, 0.72, 1.1);
-      const maintainCost =
+      let maintainCost =
         racer.baseDrain *
         intensity *
         (racer.energyDrainFactor || 1) *
@@ -3032,12 +3053,21 @@
 
         const procRating = racer.skillProcRating ?? racer.secondary?.skillProc ?? racer.profile?.secondary?.skillProc ?? 55;
         const legendaryLuck = racer.modifiers?.legendaryLuck || 0;
+        const staminaRatio = racer.energy / racer.maxEnergy;
+        
         let chance = 0.28 + racer.stats.insight * 0.002;
       chance += racer.modifiers?.skillChanceBonus || 0;
         chance += legendaryLuck * 0.45;
         chance += (procRating - 60) / 140;
+        
+      // Mood affects skill activation MORE
       const moodPercent = clamp(Math.round(racer.mood ?? 70), 0, 100);
-      chance += (moodPercent - 50) * 0.002;
+      const moodBonus = (moodPercent - 70) / 120; // Stronger effect!
+      chance += moodBonus;
+      
+      // Stamina affects skill activation - need energy to use skills!
+      const staminaBonus = staminaRatio > 0.6 ? 0.12 : staminaRatio > 0.4 ? 0.05 : -0.15;
+      chance += staminaBonus;
 
       if (!racer.isPlayer) {
         if (racer.style === "Leader" && phase === "start") {
@@ -3057,12 +3087,12 @@
 
       if (sampleRng(race) < chance) {
         skill.active = true;
-        // LONGER DURATION: 1.8x longer for more impact
-        skill.timer = (skill.duration || 4) * 1.8;
+        // LONGER DURATION: 2.0x for major impact!
+        skill.timer = (skill.duration || 4) * 2.0;
         skill.used = true;
-        racer.skillToast = { name: skill.name, timer: 2.5 }; // Show toast longer!
+        racer.skillToast = { name: skill.name, timer: 3.0 }; // Show longer!
         racer.skillLog.push({ name: skill.name, time: race.time, phase });
-        console.log(`%c⚡ SKILL ACTIVATED%c ${racer.name} used ${skill.name} (+${Math.round(skill.boost * 220)}% speed for ${skill.timer.toFixed(1)}s)`, "color:#ffd700; font-weight:bold; font-size:1.1em;", "color:#d0d3e8");
+        console.log(`%c⚡⚡ SKILL ACTIVATED ⚡⚡%c ${racer.name} used ${skill.name} (+${Math.round(skill.boost * 250)}% speed for ${skill.timer.toFixed(1)}s)`, "color:#ffd700; font-weight:bold; font-size:1.2em; background:#331a00; padding:4px;", "color:#d0d3e8");
       }
     });
   }
@@ -3083,8 +3113,8 @@
       if (skill.timer > 0) {
         const effect = skill.effect || {};
         if (typeof skill.boost === "number") {
-          // BALANCED: Skills are 2.2x stronger for competitive races
-          const enhancedBoost = skill.boost * 2.2;
+          // POWERFUL: Skills are 2.5x stronger - can create comebacks!
+          const enhancedBoost = skill.boost * 2.5;
           multiplier *= 1 + enhancedBoost;
         }
         if (skill.riskPenalty) {

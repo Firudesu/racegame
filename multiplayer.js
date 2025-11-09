@@ -824,8 +824,35 @@
         // Calculate speed based on stats and stamina
         const progress = racer.distance / TRACK_LENGTH;
         const staminaRatio = racer.energy / racer.maxEnergy;
-        const baseSpeed = 3.2 + (racer.performance.speed * 0.05);
-        const styleBonus = getStyleMultiplier(racer.style, progress);
+        
+        // Reduce speed stat dominance for closer races
+        const baseSpeed = 4.0 + (racer.performance.speed * 0.03); // Narrower range!
+        
+        // Calculate current rank
+        const sortedByDistance = race.racers.filter(r => !r.finished).sort((a, b) => b.distance - a.distance);
+        const rank = sortedByDistance.findIndex(r => r.id === racer.id) + 1;
+        
+        // Style multiplier with strategic bonuses
+        let styleBonus = getStyleMultiplier(racer.style, progress);
+        
+        // LEADER STRATEGY: Conserve stamina when in front
+        if (racer.style === 'Leader' && rank === 1) {
+          baseDrain *= 0.65; // Save 35% stamina when leading!
+          console.log(`[Strategy] ${racer.name} (Leader) is in 1st - conserving stamina!`);
+        }
+        
+        // PACER STRATEGY: Bonus when managing stamina well
+        if (racer.style === 'Pacer' && staminaRatio > 0.4 && staminaRatio < 0.8) {
+          styleBonus *= 1.08; // +8% speed when in stamina sweet spot
+        }
+        
+        // CHASER STRATEGY: Aggressive final push when behind
+        if (racer.style === 'Chaser' && progress > 0.7 && rank > 2) {
+          baseDrain *= 1.4; // Burn 40% more stamina
+          styleBonus *= 1.15; // But get +15% speed!
+          console.log(`[Strategy] ${racer.name} (Chaser) going all-out!`);
+        }
+        
         const energyFactor = Math.max(0.4, staminaRatio);
         
         // Skills boost (POWERFUL - can change race outcome!)
@@ -841,23 +868,38 @@
               (skill.trigger === 'middle' && progress >= 0.25 && progress < 0.8) ||
               (skill.trigger === 'final' && progress >= 0.8);
             
-            // Higher activation chance based on skillProc secondary stat
+            // Skill activation affected by skillProc, mood, AND stamina!
             const skillProc = racer.profile?.secondary?.skillProc || 60;
-            const baseChance = 0.65 + (skillProc - 60) / 100; // 55-95% chance
-            const finalChance = clamp(baseChance, 0.55, 0.95);
+            const mood = racer.mood || 70;
+            
+            let baseChance = 0.55 + (skillProc - 60) / 100;
+            
+            // Mood bonus: Happy horses activate skills more!
+            const moodBonus = (mood - 70) / 150;
+            baseChance += moodBonus;
+            
+            // Stamina requirement: Need 40%+ stamina to use skills
+            const staminaBonus = staminaRatio > 0.6 ? 0.15 : staminaRatio > 0.4 ? 0.05 : -0.2;
+            baseChance += staminaBonus;
+            
+            const finalChance = clamp(baseChance, 0.35, 0.95);
+            
+            if (staminaRatio < 0.3) {
+              console.log(`[Skills] ${racer.name} too exhausted to use ${skill.name} (${Math.round(staminaRatio * 100)}% stamina)`);
+            }
             
             if (shouldTrigger && Math.random() < finalChance) {
               skill.used = true;
               skill.active = true;
-              // LONGER duration (1.8x instead of 1.5x for more impact)
-              skill.timer = (skill.duration || 4) * 1.8;
-              console.log(`[Multiplayer] ⚡ ${racer.name} activated ${skill.name} for ${skill.timer.toFixed(1)}s!`);
+              // LONGER duration (2.0x for major impact!)
+              skill.timer = (skill.duration || 4) * 2.0;
+              console.log(`[Multiplayer] ⚡⚡ ${racer.name} activated ${skill.name} (+${Math.round(skill.boost * 250)}% for ${skill.timer.toFixed(1)}s)!`);
             }
             
             if (skill.active && skill.timer > 0) {
-              // BALANCED boost for competitive races (2.2x instead of 2.5x)
+              // POWERFUL boost for comebacks (2.5x)
               const rawBoost = skill.boost || 0.15;
-              const enhancedBoost = rawBoost * 2.2; // Strong but not overwhelming!
+              const enhancedBoost = rawBoost * 2.5;
               skillBoost += enhancedBoost;
               skill.timer -= TRACK_STEP;
               
@@ -874,9 +916,9 @@
         // Move forward
         racer.distance += speed * TRACK_STEP;
         
-        // Drain stamina (BALANCED for excitement - finish with 5-25% energy)
+        // Drain stamina (AGGRESSIVE - stamina is strategic resource!)
         const intensity = speed / baseSpeed;
-        let baseDrain = 2.8 * TRACK_STEP * intensity; // Tuned for close finishes!
+        let baseDrain = 5.0 * TRACK_STEP * intensity; // Finish with 0-20% energy!
         
         // Apply paceControl from secondary stats (MAJOR impact!)
         const paceControl = racer.profile?.secondary?.paceControl || 60;
