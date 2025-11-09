@@ -2920,23 +2920,24 @@
     let styleMultiplier = getStylePhaseMultiplier(racer.style, phase);
     const staminaRatio = Math.max(0, Math.min(1, racer.energy / racer.maxEnergy));
     
-    // Racing style strategic bonuses
+    // Racing style strategic bonuses (for styleMultiplier)
     const rank = getRank(racer, race.leaderboard);
-    
-    // LEADER: Save stamina when ahead
-    if (racer.style === 'Leader' && rank === 1 && progress < 0.6) {
-      maintainCost *= 0.65; // 35% less drain when leading early!
-    }
     
     // PACER: Optimal stamina management
     if (racer.style === 'Pacer' && staminaRatio > 0.4 && staminaRatio < 0.8) {
       styleMultiplier *= 1.08; // +8% when managing well
     }
     
-    // CHASER: Burn stamina for final burst
+    // CHASER: Burn stamina for final burst (will affect drain later)
+    let styleDrainMultiplier = 1.0;
     if (racer.style === 'Chaser' && phase === 'final' && rank > 2) {
-      maintainCost *= 1.35; // Burn more stamina
+      styleDrainMultiplier = 1.35; // Burn more stamina
       styleMultiplier *= 1.12; // Get extra speed!
+    }
+    
+    // LEADER: Save stamina when ahead (will affect drain later)
+    if (racer.style === 'Leader' && rank === 1 && progress < 0.6) {
+      styleDrainMultiplier = 0.65; // 35% less drain when leading early!
     }
     
       const paceControl = racer.secondary?.paceControl ?? 60;
@@ -3020,6 +3021,7 @@
         focusDrainFactor *
         shieldFactor *
         paceDrainFactor *
+        styleDrainMultiplier * // Racing style affects drain!
         dt;
     spendStamina(racer, maintainCost, "maintain", race);
 
