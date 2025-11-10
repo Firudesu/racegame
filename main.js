@@ -2693,8 +2693,8 @@
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // BALANCED DRAIN: Target 40-60% stamina at finish
-  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 5.5) * adjustedStaminaMod;
+    // AGGRESSIVE DRAIN: Overpower recovery skills, target 30-50% finish
+  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 9.0) * adjustedStaminaMod;
 
     const racerObj = {
       id,
