@@ -709,6 +709,10 @@
     const seed = Date.now() + Math.random() * 1000;
     const rng = Data.createSeededRng(seed);
     
+    // Generate track conditions for this race (same as single-player)
+    const trackConditions = generateMultiplayerTrackConditions();
+    console.log('[Multiplayer] Track Conditions:', trackConditions);
+    
     // Build racers using FULL race engine
     const racers = [];
     
@@ -784,10 +788,27 @@
       const decisionFactor = clamp(racer.zoneDecisionFactorBase || 1, 0.5, 1.3);
       racer.strategyCooldown = (0.3 + rng() * 0.5) * decisionFactor;
       RaceSim.applyRacePerformanceAdjustments(racer, rng);
+      
+      // Apply track conditions with adaptability
+      const trackAdaptability = racer.secondary?.trackAdaptability || 60;
+      const adaptabilityFactor = trackAdaptability / 100;
+      
+      const speedPenalty = (1 - trackConditions.speedModifier);
+      const staminaPenalty = (trackConditions.staminaModifier - 1);
+      
+      const adjustedSpeedMod = 1 - (speedPenalty * (1 - adaptabilityFactor * 0.6));
+      const adjustedStaminaMod = 1 + (staminaPenalty * (1 - adaptabilityFactor * 0.5));
+      
+      // Adjust racer's speed and stamina based on conditions
+      racer.baseSpeed *= adjustedSpeedMod;
+      racer.maxSpeed *= adjustedSpeedMod;
+      racer.baseDrain *= adjustedStaminaMod;
+      
+      console.log(`[Track] ${racer.name} - Adaptability: ${trackAdaptability}, Speed: ${(adjustedSpeedMod * 100).toFixed(1)}%, Drain: ${(adjustedStaminaMod * 100).toFixed(1)}%`);
     });
     
-    // Assign lanes
-    RaceSim.assignInitialLanes(racers);
+    // Lanes are already assigned randomly in buildRacer()
+    // RaceSim.assignInitialLanes(racers);
     
     // Create race state
     const race = {
@@ -817,6 +838,19 @@
       // Simplified race update - just move horses forward based on stats
       race.racers.forEach(racer => {
         if (racer.finished) return;
+        
+        // Starting break delay - horse hasn't broken from gate yet
+        if (!racer.hasStarted) {
+          const raceStartTime = racer.startingBreakDelay || 0;
+          if (race.time < raceStartTime) {
+            racer.speed = 0;
+            racer.distance = 0;
+            return; // Don't move until break time
+          } else {
+            racer.hasStarted = true;
+            console.log(`[Break] ${racer.name} broke from gate at ${race.time.toFixed(2)}s (delay: ${raceStartTime.toFixed(3)}s)`);
+          }
+        }
         
         // Initialize distance if not set
         if (!racer.distance) racer.distance = 0;
@@ -1350,6 +1384,39 @@
   // =====================================================
   // UTILITIES
   // =====================================================
+
+  function generateMultiplayerTrackConditions() {
+    const trackStates = ['clean', 'slightly_dirty', 'muddy'];
+    const weatherConditions = ['sunny', 'overcast', 'rainy'];
+    
+    const trackState = trackStates[Math.floor(Math.random() * trackStates.length)];
+    const weather = weatherConditions[Math.floor(Math.random() * weatherConditions.length)];
+    
+    let speedModifier = 1.0;
+    let staminaModifier = 1.0;
+    
+    // Track state effects
+    if (trackState === 'slightly_dirty') {
+      speedModifier *= 0.96;
+      staminaModifier *= 1.08;
+    } else if (trackState === 'muddy') {
+      speedModifier *= 0.88;
+      staminaModifier *= 1.20;
+    }
+    
+    // Weather effects
+    if (weather === 'rainy') {
+      speedModifier *= 0.94;
+      staminaModifier *= 1.10;
+    }
+    
+    return {
+      trackState,
+      weather,
+      speedModifier,
+      staminaModifier
+    };
+  }
 
   function getOrdinal(n) {
     const s = ['th', 'st', 'nd', 'rd'];
