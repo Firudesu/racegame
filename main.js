@@ -161,9 +161,18 @@
   const TRACK_STEP = 1 / 20;
 
   const TRACK_ZONES = [
-    { key: "inside", display: "Inside Track", radiusOffset: -24, distanceMultiplier: 0.98 },
+    { key: "inside", display: "Inside Track", radiusOffset: -24, distanceMultiplier: 0.99 }, // Reduced from 0.98
     { key: "mid", display: "Mid Track", radiusOffset: 0, distanceMultiplier: 1 },
-    { key: "outside", display: "Outside Track", radiusOffset: 24, distanceMultiplier: 1.03 }
+    { key: "outside", display: "Outside Track", radiusOffset: 24, distanceMultiplier: 1.01 } // Reduced from 1.03
+  ];
+  
+  // Track sections for tactical racing (straights vs turns)
+  const TRACK_SECTIONS = [
+    { name: "Straight 1", start: 0.00, end: 0.20, type: "straight", speedBonus: 1.05, overtakeBonus: 1.3 },
+    { name: "Turn 1", start: 0.20, end: 0.35, type: "turn", speedBonus: 0.96, handlingMatter: true },
+    { name: "Straight 2 (Back)", start: 0.35, end: 0.65, type: "straight", speedBonus: 1.06, overtakeBonus: 1.4 },
+    { name: "Turn 2", start: 0.65, end: 0.80, type: "turn", speedBonus: 0.96, handlingMatter: true },
+    { name: "Home Straight", start: 0.80, end: 1.00, type: "straight", speedBonus: 1.08, overtakeBonus: 1.5 }
   ];
 
   const ZONE_COUNT = TRACK_ZONES.length;
@@ -2683,8 +2692,8 @@
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // AGGRESSIVE DRAIN: Target 20-35% energy at finish for strategic sprint management
-  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 7.0) * adjustedStaminaMod;
+    // VERY AGGRESSIVE DRAIN: Force all horses to push hard (no coasting to victory!)
+  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 8.5) * adjustedStaminaMod;
 
     const racerObj = {
       id,
@@ -3009,6 +3018,15 @@
     }
   }
 
+  function getCurrentTrackSection(progress) {
+    for (const section of TRACK_SECTIONS) {
+      if (progress >= section.start && progress < section.end) {
+        return section;
+      }
+    }
+    return TRACK_SECTIONS[0]; // Default to first section
+  }
+
   function decideSprint(racer, race, progress, phase, rank, staminaRatio) {
     // Don't sprint if too tired
     if (staminaRatio < 0.35) {
@@ -3019,6 +3037,10 @@
     const trackConditions = race.trackConditions || state.currentTrackConditions || { speedModifier: 1.0 };
     const trackAdaptability = racer.secondary?.trackAdaptability || 60;
     const isCleanTrack = trackConditions.speedModifier > 0.95 || trackAdaptability > 70;
+    
+    // Check if in straight section (better for sprinting!)
+    const currentSection = getCurrentTrackSection(progress);
+    const inStraight = currentSection && currentSection.type === 'straight';
     
     // Calculate gap to leader
     const leader = race.leaderboard[0];
@@ -3062,45 +3084,45 @@
       }
     }
     
-    // PACER: Sprint at key tactical moments
+    // PACER: Sprint at key tactical moments (prefer straights!)
     if (style === 'Pacer') {
-      if (canOvertake && staminaRatio > 0.5 && isCleanTrack && phase === 'middle') {
-        return { sprint: true, reason: "Tactical overtake on clean track!" };
+      if (canOvertake && staminaRatio > 0.5 && isCleanTrack && inStraight && phase === 'middle') {
+        return { sprint: true, reason: "Tactical overtake on straight!" };
       }
       if (isFallingBehind && staminaRatio > 0.55 && phase === 'middle') {
         return { sprint: true, reason: "Closing gap to maintain pace!" };
       }
-      if (phase === 'final' && rank > 2 && staminaRatio > 0.45 && canOvertake) {
-        return { sprint: true, reason: "Final phase positioning!" };
+      if (phase === 'final' && rank > 2 && staminaRatio > 0.45 && canOvertake && inStraight) {
+        return { sprint: true, reason: "Final straight positioning!" };
       }
     }
     
-    // CHASER: Save stamina, sprint in final phase
+    // CHASER: Save stamina, sprint in final phase (wait for home straight!)
     if (style === 'Chaser') {
       if (phase === 'final' && staminaRatio > 0.5) {
-        if (canOvertake && isCleanTrack) {
-          return { sprint: true, reason: "Final phase attack with saved stamina!" };
+        if (canOvertake && isCleanTrack && inStraight) {
+          return { sprint: true, reason: "Home straight attack with saved stamina!" };
         }
-        if (isFallingBehind && staminaRatio > 0.55) {
-          return { sprint: true, reason: "Closing gap for final sprint!" };
+        if (isFallingBehind && staminaRatio > 0.55 && inStraight) {
+          return { sprint: true, reason: "Home straight sprint to close gap!" };
         }
       }
-      // Early/middle: only sprint if desperately falling behind
-      if (phase !== 'final' && isFallingBehind && gapInUnits > 50 && staminaRatio > 0.7) {
-        return { sprint: true, reason: "Emergency sprint to stay in touch!" };
+      // Early/middle: only sprint if desperately falling behind (prefer straights!)
+      if (phase !== 'final' && isFallingBehind && gapInUnits > 50 && staminaRatio > 0.7 && inStraight) {
+        return { sprint: true, reason: "Emergency sprint on straight!" };
       }
     }
     
-    // SPRINTER: Multiple short bursts throughout
+    // SPRINTER: Multiple short bursts throughout (maximize straights!)
     if (style === 'Sprinter') {
-      if (phase === 'start' && aggression > 65 && staminaRatio > 0.7 && isCleanTrack) {
-        return { sprint: true, reason: "Aggressive early burst!" };
+      if (phase === 'start' && aggression > 65 && staminaRatio > 0.7 && inStraight) {
+        return { sprint: true, reason: "Aggressive early burst on straight!" };
       }
-      if (phase === 'middle' && canOvertake && staminaRatio > 0.55 && isCleanTrack) {
-        return { sprint: true, reason: "Mid-race overtake!" };
+      if (phase === 'middle' && canOvertake && staminaRatio > 0.55 && inStraight) {
+        return { sprint: true, reason: "Mid-race overtake on straight!" };
       }
-      if (phase === 'final' && (canOvertake || rank > 2) && staminaRatio > 0.4) {
-        return { sprint: true, reason: "Sprinter final burst!" };
+      if (phase === 'final' && (canOvertake || rank > 2) && staminaRatio > 0.4 && inStraight) {
+        return { sprint: true, reason: "Home straight sprint!" };
       }
     }
     
@@ -3423,6 +3445,37 @@
       const phaseRating = racer.phasePowerProfile?.[phase];
       const phaseSynergy = phaseRating ? clamp(1 + (phaseRating - 60) / 260, 0.85, 1.3) : 1;
     
+    // Track section mechanics (straights vs turns)
+    let trackSectionMultiplier = 1.0;
+    let overtakeMultiplier = 1.0;
+    const currentSection = getCurrentTrackSection(progress);
+    if (currentSection) {
+      if (currentSection.type === 'straight') {
+        // Straights: Speed matters, overtaking easier
+        trackSectionMultiplier = currentSection.speedBonus;
+        overtakeMultiplier = currentSection.overtakeBonus;
+        if (racer.isPlayer && !racer.currentSectionLogged) {
+          racer.currentSectionLogged = currentSection.name;
+          console.log(`🏁 [${currentSection.name}] Speed +${((currentSection.speedBonus - 1) * 100).toFixed(0)}%, Overtaking +${((currentSection.overtakeBonus - 1) * 100).toFixed(0)}%`);
+        }
+      } else if (currentSection.type === 'turn') {
+        // Turns: Handling matters, speed reduced
+        const handlingRating = racer.performance?.handling || 50;
+        const turnPenalty = currentSection.speedBonus; // 0.96
+        const handlingBonus = 1 + (handlingRating - 50) / 400; // 0.975 to 1.125
+        trackSectionMultiplier = turnPenalty * handlingBonus;
+        overtakeMultiplier = 0.7; // Harder to overtake in turns!
+        if (racer.isPlayer && racer.currentSectionLogged !== currentSection.name) {
+          racer.currentSectionLogged = currentSection.name;
+          console.log(`🔄 [${currentSection.name}] Speed ${((trackSectionMultiplier - 1) * 100).toFixed(1)}%, Overtaking harder`);
+        }
+      }
+    }
+    // Reset section log when leaving section
+    if (currentSection && racer.currentSectionLogged && racer.currentSectionLogged !== currentSection.name) {
+      racer.currentSectionLogged = null;
+    }
+    
     // Surface performance bonus/penalty
     let surfaceMultiplier = 1.0;
     const trackConditions = race.trackConditions || state.currentTrackConditions;
@@ -3477,6 +3530,7 @@
       baseSpeed *
       styleMultiplier *
       sprintMultiplier * // SPRINT BOOST!
+      trackSectionMultiplier * // TRACK SECTION (straights vs turns)!
       surfaceMultiplier * // SURFACE PERFORMANCE!
       energyFactor *
       skillMultiplier *
