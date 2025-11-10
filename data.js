@@ -188,7 +188,7 @@
       type: "passive",
       rarity: 2,
       description: "Recovers a little stamina at low speeds.",
-      effect: { coolRecoveryRate: 0.016 }
+      effect: { coolRecoveryRate: 0.002 }
     }
   ];
 

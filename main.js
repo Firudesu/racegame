@@ -2693,8 +2693,8 @@
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // AGGRESSIVE DRAIN: Overpower recovery skills, target 30-50% finish
-  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 9.0) * adjustedStaminaMod;
+    // FINAL BALANCED DRAIN: Account for recovery skills
+  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 7.0) * adjustedStaminaMod;
 
     const racerObj = {
       id,
@@ -3133,16 +3133,16 @@
       }
     }
     
-    // SPRINTER: Multiple short bursts throughout (maximize straights!)
+    // SPRINTER: Save for final phase, tactical mid-race
     if (style === 'Sprinter') {
-      if (phase === 'start' && aggression > 65 && staminaRatio > 0.7 && inStraight) {
-        return { sprint: true, reason: "Aggressive early burst on straight!" };
+      if (phase === 'start' && aggression > 75 && staminaRatio > 0.8 && inStraight && rank > 2) {
+        return { sprint: true, reason: "Early catch-up burst!" };
       }
-      if (phase === 'middle' && canOvertake && staminaRatio > 0.55 && inStraight) {
+      if (phase === 'middle' && canOvertake && staminaRatio > 0.6 && inStraight && rank > 2) {
         return { sprint: true, reason: "Mid-race overtake on straight!" };
       }
-      if (phase === 'final' && (canOvertake || rank > 2) && staminaRatio > 0.4 && inStraight) {
-        return { sprint: true, reason: "Home straight sprint!" };
+      if (phase === 'final' && staminaRatio > 0.35 && inStraight) {
+        return { sprint: true, reason: "Sprinter final burst!" };
       }
     }
     
@@ -3515,7 +3515,7 @@
       } else if (trackConditions.weather === 'rainy') {
         // Wet/Rainy track
         const wetRating = surfPerf.wet || 60;
-        const basePenalty = (1 - trackConditions.speedModifier);
+        const basePenalty = (1 - trackConditions.speedModifier) * 0.5; // Half penalty!
         surfaceMultiplier = 1 - (basePenalty * (1 - (wetRating - 40) / 150));
         if (racer.isPlayer && !racer.surfacePerfLogged) {
           racer.surfacePerfLogged = true;
@@ -3524,7 +3524,7 @@
       } else if (trackConditions.trackState === 'muddy') {
         // Muddy track
         const muddyRating = surfPerf.muddy || 60;
-        const basePenalty = (1 - trackConditions.speedModifier);
+        const basePenalty = (1 - trackConditions.speedModifier) * 0.5; // Half penalty!
         surfaceMultiplier = 1 - (basePenalty * (1 - (muddyRating - 40) / 120));
         if (racer.isPlayer && !racer.surfacePerfLogged) {
           racer.surfacePerfLogged = true;
