@@ -2683,8 +2683,8 @@
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // INCREASED DRAIN: Target 20-35% energy at finish for strategic racing
-  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 5.5) * adjustedStaminaMod;
+    // AGGRESSIVE DRAIN: Target 20-35% energy at finish for strategic sprint management
+  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 7.0) * adjustedStaminaMod;
 
     const racerObj = {
       id,
@@ -2741,9 +2741,11 @@
       sprintTimer: 0,
       sprintCooldown: 0,
       sprintsUsed: 0,
-      maxSprints: 3, // Can sprint 3 times per race
       sprinterFinalPhaseLogged: false,
       sprinterExplosionLogged: false,
+      chaserStrategyActive: false,
+      pacerStrategyActive: false,
+      leaderStrategyActive: false,
       isBlocked: false,
       lowStaminaNotified: false,
       lastBlockDrain: 0,
@@ -3309,13 +3311,14 @@
     }
     
     // Decide if we should sprint (if not already sprinting)
-    if (!racer.sprintMode && racer.sprintCooldown <= 0 && racer.sprintsUsed < racer.maxSprints) {
+    // NO SPRINT LIMIT! Constrained naturally by stamina and cooldown
+    if (!racer.sprintMode && racer.sprintCooldown <= 0 && staminaRatio > 0.30) {
       const shouldSprint = decideSprint(racer, race, progress, phase, rank, staminaRatio);
       if (shouldSprint.sprint) {
         racer.sprintMode = true;
         racer.sprintTimer = 3.0 + (racer.stats.resolve / 100); // 3-4 second sprint
         racer.sprintsUsed++;
-        console.log(`🏃‍♂️ [Sprint] ${racer.name} pushing hard! ${shouldSprint.reason}`);
+        console.log(`🏃‍♂️ [Sprint #${racer.sprintsUsed}] ${racer.name} pushing hard! ${shouldSprint.reason}`);
       }
     }
     
@@ -3326,32 +3329,46 @@
       const sprintPowerRating = racer.secondary?.sprintPower || 60;
       sprintMultiplier = 1.15 + (sprintPowerRating - 60) / 200; // 1.075 to 1.275 (7.5% to 27.5%)
       
-      // Sprint stamina cost based on sprintEfficiency stat
+      // Sprint stamina cost based on sprintEfficiency stat (TIGHTER RANGE)
       const sprintEffRating = racer.secondary?.sprintEfficiency || 60;
-      sprintDrainMultiplier = 2.8 - (sprintEffRating - 60) / 125; // 2.0x to 2.96x
+      sprintDrainMultiplier = 2.8 - (sprintEffRating - 60) / 250; // 2.3x to 2.9x (tighter!)
       
-      if (racer.isPlayer && racer.sprintTimer > 2.9) {
-        console.log(`📊 [Sprint Stats] Power: ${sprintPowerRating} (+${((sprintMultiplier - 1) * 100).toFixed(1)}%), Efficiency: ${sprintEffRating} (${sprintDrainMultiplier.toFixed(2)}x drain)`);
+      // Only log once when sprint starts
+      if (!racer.sprintStatsLogged) {
+        racer.sprintStatsLogged = true;
+        if (racer.isPlayer) {
+          console.log(`📊 [Sprint Stats] Power: ${sprintPowerRating} (+${((sprintMultiplier - 1) * 100).toFixed(1)}%), Efficiency: ${sprintEffRating} (${sprintDrainMultiplier.toFixed(2)}x drain)`);
+        }
       }
+    } else {
+      racer.sprintStatsLogged = false; // Reset for next sprint
     }
     // ============================================
     
     // PACER: Optimal stamina management
-    if (racer.style === 'Pacer' && staminaRatio > 0.4 && staminaRatio < 0.8) {
+    const pacerCondition = racer.style === 'Pacer' && staminaRatio > 0.4 && staminaRatio < 0.8;
+    if (pacerCondition) {
       styleMultiplier *= 1.08; // +8% when managing well
-      if (racer.isPlayer || Math.random() < 0.03) {
+      if (!racer.pacerStrategyActive) {
+        racer.pacerStrategyActive = true;
         console.log(`⚖️ [Pacer Strategy] ${racer.name} in stamina sweet spot! +8% speed`);
       }
+    } else {
+      racer.pacerStrategyActive = false;
     }
     
     // CHASER: Burn stamina for final burst (will affect drain later)
     let styleDrainMultiplier = 1.0;
-    if (racer.style === 'Chaser' && phase === 'final' && rank > 2) {
+    const chaserCondition = racer.style === 'Chaser' && phase === 'final' && rank > 2;
+    if (chaserCondition) {
       styleDrainMultiplier = 1.35; // Burn more stamina
       styleMultiplier *= 1.12; // Get extra speed!
-      if (racer.isPlayer || Math.random() < 0.05) {
+      if (!racer.chaserStrategyActive) {
+        racer.chaserStrategyActive = true;
         console.log(`⚡ [Chaser Strategy] ${racer.name} burning stamina for final push! +12% speed`);
       }
+    } else {
+      racer.chaserStrategyActive = false;
     }
     
     // SPRINTER: MASSIVE final phase boost!
@@ -3371,11 +3388,15 @@
     }
     
     // LEADER: Save stamina when ahead (will affect drain later)
-    if (racer.style === 'Leader' && rank === 1 && progress < 0.6) {
+    const leaderCondition = racer.style === 'Leader' && rank === 1 && progress < 0.6;
+    if (leaderCondition) {
       styleDrainMultiplier = 0.65; // 35% less drain when leading early!
-      if (racer.isPlayer || Math.random() < 0.05) {
+      if (!racer.leaderStrategyActive) {
+        racer.leaderStrategyActive = true;
         console.log(`🎯 [Leader Strategy] ${racer.name} in 1st, conserving stamina (-35% drain)`);
       }
+    } else {
+      racer.leaderStrategyActive = false;
     }
     
       const paceControl = racer.secondary?.paceControl ?? 60;

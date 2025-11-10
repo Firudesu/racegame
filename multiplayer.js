@@ -950,9 +950,9 @@
         // Move forward
         racer.distance += speed * TRACK_STEP;
         
-        // Drain stamina (INCREASED - target 20-35% energy at finish!)
+        // Drain stamina (AGGRESSIVE - target 20-35% energy at finish!)
         const intensity = speed / baseSpeed;
-        let baseDrain = 5.5 * TRACK_STEP * intensity; // Increased from 4.2 for strategic racing!
+        let baseDrain = 7.0 * TRACK_STEP * intensity; // Increased from 5.5 for strategic sprint management!
         
         // Apply paceControl from secondary stats (MAJOR impact!)
         const paceControl = racer.profile?.secondary?.paceControl || 60;
