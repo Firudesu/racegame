@@ -175,7 +175,6 @@
   const PASS_COOLDOWN_MAX = 6.0; // Increased from 4.0 - more realistic timing
   const PASS_COST_SUCCESS = { min: 10, max: 16 }; // Increased from 6-10 - passing is expensive!
   const PASS_COST_FAIL = { min: 18, max: 25 }; // Increased from 4-8 - failed pass is VERY costly
-  const BLOCK_DEFENSE_COST = 3; // Cost to defend a pass
   const BLOCK_STAMINA_TICK = 2;
   const BLOCK_DEFENSE_COST = 2.5;
   const FINAL_SPRINT_COST = 15;
