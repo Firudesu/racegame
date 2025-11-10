@@ -504,6 +504,21 @@
     // Track adaptability (performs well in dirty/wet conditions)
     const trackAdaptability = clamp(Math.round((resolve * 0.5 + endurance * 0.35 + insight * 0.15) * baseMult), 35, 95);
     
+    // Sprint-specific stats (explosive racing ability)
+    const sprintPower = clamp(Math.round((stride * 0.5 + force * 0.35 + aggression * 0.15) * baseMult), 35, 95);
+    const sprintEfficiency = clamp(Math.round((endurance * 0.4 + paceControl * 0.35 + resolve * 0.25) * baseMult), 35, 95);
+    const burstFrequency = clamp(Math.round((insight * 0.6 + aggression * 0.4) * baseMult), 35, 95);
+    
+    // Enhanced stamina recovery (more impactful than coolRecoveryRate)
+    const staminaRecovery = clamp(Math.round((endurance * 0.5 + resolve * 0.3 + paceControl * 0.2) * baseMult), 35, 95);
+    
+    // Surface-specific performance
+    const surfacePerformance = {
+      dry: clamp(Math.round((stride * 0.6 + insight * 0.4) * baseMult), 35, 95),
+      wet: clamp(Math.round((endurance * 0.5 + resolve * 0.3 + trackAdaptability * 0.2) * baseMult), 35, 95),
+      muddy: clamp(Math.round((resolve * 0.5 + endurance * 0.4 + force * 0.1) * baseMult), 35, 95)
+    };
+    
     return {
       maneuverBase,
       passingPower,
@@ -517,7 +532,12 @@
       zoneDecisionFactor,
       phasePower,
       positioning,
-      trackAdaptability
+      trackAdaptability,
+      sprintPower,
+      sprintEfficiency,
+      burstFrequency,
+      staminaRecovery,
+      surfacePerformance
     };
   }
 

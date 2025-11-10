@@ -534,6 +534,34 @@
         <span class="secondary-stat-label">💪 Fatigue Resistance</span>
         <span class="secondary-stat-value">${secondary.fatigueResistance || 60}</span>
       </div>
+      <div class="secondary-stat-item">
+        <span class="secondary-stat-label">🚀 Sprint Power</span>
+        <span class="secondary-stat-value">${secondary.sprintPower || 60}</span>
+      </div>
+      <div class="secondary-stat-item">
+        <span class="secondary-stat-label">⚡ Sprint Efficiency</span>
+        <span class="secondary-stat-value">${secondary.sprintEfficiency || 60}</span>
+      </div>
+      <div class="secondary-stat-item">
+        <span class="secondary-stat-label">🔄 Sprint Frequency</span>
+        <span class="secondary-stat-value">${secondary.burstFrequency || 60}</span>
+      </div>
+      <div class="secondary-stat-item">
+        <span class="secondary-stat-label">💚 Stamina Recovery</span>
+        <span class="secondary-stat-value">${secondary.staminaRecovery || 60}</span>
+      </div>
+      <div class="secondary-stat-item">
+        <span class="secondary-stat-label">☀️ Dry Track Performance</span>
+        <span class="secondary-stat-value">${secondary.surfacePerformance?.dry || 60}</span>
+      </div>
+      <div class="secondary-stat-item">
+        <span class="secondary-stat-label">🌧️ Wet Track Performance</span>
+        <span class="secondary-stat-value">${secondary.surfacePerformance?.wet || 60}</span>
+      </div>
+      <div class="secondary-stat-item">
+        <span class="secondary-stat-label">💧 Muddy Track Performance</span>
+        <span class="secondary-stat-value">${secondary.surfacePerformance?.muddy || 60}</span>
+      </div>
     `;
   }
 
@@ -3274,8 +3302,10 @@
     // End sprint if timer expires
     if (racer.sprintMode && racer.sprintTimer <= 0) {
       racer.sprintMode = false;
-      console.log(`💨 [Sprint End] ${racer.name} easing off (cooldown: 8s)`);
-      racer.sprintCooldown = 8.0;
+      const burstFreqRating = racer.secondary?.burstFrequency || 60;
+      const cooldown = 9.0 - (burstFreqRating - 35) / 25; // 6.6s to 9.0s based on stat
+      console.log(`💨 [Sprint End] ${racer.name} easing off (cooldown: ${cooldown.toFixed(1)}s)`);
+      racer.sprintCooldown = cooldown;
     }
     
     // Decide if we should sprint (if not already sprinting)
@@ -3292,8 +3322,17 @@
     let sprintMultiplier = 1.0;
     let sprintDrainMultiplier = 1.0;
     if (racer.sprintMode) {
-      sprintMultiplier = 1.25; // +25% speed while sprinting!
-      sprintDrainMultiplier = 2.5; // Burn stamina 2.5x faster!
+      // Sprint speed boost based on sprintPower stat
+      const sprintPowerRating = racer.secondary?.sprintPower || 60;
+      sprintMultiplier = 1.15 + (sprintPowerRating - 60) / 200; // 1.075 to 1.275 (7.5% to 27.5%)
+      
+      // Sprint stamina cost based on sprintEfficiency stat
+      const sprintEffRating = racer.secondary?.sprintEfficiency || 60;
+      sprintDrainMultiplier = 2.8 - (sprintEffRating - 60) / 125; // 2.0x to 2.96x
+      
+      if (racer.isPlayer && racer.sprintTimer > 2.9) {
+        console.log(`📊 [Sprint Stats] Power: ${sprintPowerRating} (+${((sprintMultiplier - 1) * 100).toFixed(1)}%), Efficiency: ${sprintEffRating} (${sprintDrainMultiplier.toFixed(2)}x drain)`);
+      }
     }
     // ============================================
     
@@ -3351,6 +3390,41 @@
     const slipstreamMultiplier = computeSlipstreamMultiplier(racer, race);
       const phaseRating = racer.phasePowerProfile?.[phase];
       const phaseSynergy = phaseRating ? clamp(1 + (phaseRating - 60) / 260, 0.85, 1.3) : 1;
+    
+    // Surface performance bonus/penalty
+    let surfaceMultiplier = 1.0;
+    const trackConditions = race.trackConditions || state.currentTrackConditions;
+    if (trackConditions && racer.secondary?.surfacePerformance) {
+      const surfPerf = racer.secondary.surfacePerformance;
+      
+      if (trackConditions.speedModifier >= 0.98) {
+        // Clean/Dry track
+        const dryRating = surfPerf.dry || 60;
+        surfaceMultiplier = 1 + (dryRating - 60) / 400; // 0.9375 to 1.0625
+        if (racer.isPlayer && !racer.surfacePerfLogged) {
+          racer.surfacePerfLogged = true;
+          console.log(`☀️ [Surface] ${racer.name} on dry track (rating: ${dryRating}) → ${((surfaceMultiplier - 1) * 100).toFixed(1)}% speed`);
+        }
+      } else if (trackConditions.weather === 'rainy') {
+        // Wet/Rainy track
+        const wetRating = surfPerf.wet || 60;
+        const basePenalty = (1 - trackConditions.speedModifier);
+        surfaceMultiplier = 1 - (basePenalty * (1 - (wetRating - 40) / 150));
+        if (racer.isPlayer && !racer.surfacePerfLogged) {
+          racer.surfacePerfLogged = true;
+          console.log(`🌧️ [Surface] ${racer.name} on wet track (rating: ${wetRating}) → ${((surfaceMultiplier - 1) * 100).toFixed(1)}% speed`);
+        }
+      } else if (trackConditions.trackState === 'muddy') {
+        // Muddy track
+        const muddyRating = surfPerf.muddy || 60;
+        const basePenalty = (1 - trackConditions.speedModifier);
+        surfaceMultiplier = 1 - (basePenalty * (1 - (muddyRating - 40) / 120));
+        if (racer.isPlayer && !racer.surfacePerfLogged) {
+          racer.surfacePerfLogged = true;
+          console.log(`💧 [Surface] ${racer.name} on muddy track (rating: ${muddyRating}) → ${((surfaceMultiplier - 1) * 100).toFixed(1)}% speed`);
+        }
+      }
+    }
 
     let finalBurstMultiplier = 1;
     if (phase === "final") {
@@ -3371,6 +3445,7 @@
       baseSpeed *
       styleMultiplier *
       sprintMultiplier * // SPRINT BOOST!
+      surfaceMultiplier * // SURFACE PERFORMANCE!
       energyFactor *
       skillMultiplier *
       resolveBoost *
@@ -3433,8 +3508,20 @@
 
     const timeSincePass = race.time - (racer.lastPassAttempt || 0);
     if (!racer.isBlocked && timeSincePass > 2.2 && racer.energy < racer.maxEnergy) {
-      const regen = (COAST_REGEN_BASE + (racer.coolRecoveryRate || 0)) * dt;
+      // Enhanced recovery based on staminaRecovery stat
+      const recoveryRating = racer.secondary?.staminaRecovery || 60;
+      const baseRecovery = 0.05 + (recoveryRating - 35) / 250; // 0.07 to 0.29
+      const regen = (baseRecovery + (racer.coolRecoveryRate || 0)) * dt;
       recoverStamina(racer, regen);
+      
+      // Random stamina boost for high recovery rating
+      if (recoveryRating > 75 && Math.random() < 0.002) {
+        const boost = 3 + (recoveryRating - 75) / 5; // 3-7 stamina
+        recoverStamina(racer, boost);
+        if (racer.isPlayer || Math.random() < 0.3) {
+          console.log(`💚 [Recovery Boost] ${racer.name} caught breath! +${boost.toFixed(1)} stamina`);
+        }
+      }
     }
 
     if (racer.coolRecoveryRate && updatedSpeed < racer.baseSpeed * 0.65) {
