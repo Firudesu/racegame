@@ -3024,7 +3024,7 @@
     const leader = race.leaderboard[0];
     const gapToLeader = leader ? (leader.distance - racer.distance) : 0;
     const gapInUnits = Math.abs(gapToLeader);
-    const isFallingBehind = gapInUnits > 30;
+    const isFallingBehind = gapInUnits > 50; // Increased from 30 - don't panic sprint too early!
     const isCloseRace = gapInUnits < 20;
     
     // Calculate gap to horse ahead
@@ -3105,7 +3105,7 @@
     }
     
     // UNIVERSAL: Sprint if desperately falling behind with good stamina
-    if (isFallingBehind && gapInUnits > 60 && staminaRatio > 0.65 && phase !== 'start') {
+    if (isFallingBehind && gapInUnits > 80 && staminaRatio > 0.65 && phase !== 'start') {
       return { sprint: true, reason: "Desperate sprint to close major gap!" };
     }
     
@@ -3325,9 +3325,9 @@
     let sprintMultiplier = 1.0;
     let sprintDrainMultiplier = 1.0;
     if (racer.sprintMode) {
-      // Sprint speed boost based on sprintPower stat
+      // Sprint speed boost based on sprintPower stat (INCREASED RANGE!)
       const sprintPowerRating = racer.secondary?.sprintPower || 60;
-      sprintMultiplier = 1.15 + (sprintPowerRating - 60) / 200; // 1.075 to 1.275 (7.5% to 27.5%)
+      sprintMultiplier = 1.15 + (sprintPowerRating - 60) / 143; // 1.15 to 1.40 (15% to 40%!)
       
       // Sprint stamina cost based on sprintEfficiency stat (TIGHTER RANGE)
       const sprintEffRating = racer.secondary?.sprintEfficiency || 60;
@@ -3371,29 +3371,40 @@
       racer.chaserStrategyActive = false;
     }
     
-    // SPRINTER: MASSIVE final phase boost!
-    if (racer.style === 'Sprinter' && phase === 'final') {
-      if (!racer.sprinterFinalPhaseLogged) {
-        racer.sprinterFinalPhaseLogged = true;
-        console.log(`🏃 [Sprinter Surge] ${racer.name} activating final speed! +22%`);
-      }
-      styleMultiplier *= 1.22; // +22% speed in final phase!
-      if (progress > 0.9) {
-        if (!racer.sprinterExplosionLogged) {
-          racer.sprinterExplosionLogged = true;
-          console.log(`🚀 [Sprinter Explosion] ${racer.name} going ALL OUT! +40% speed!`);
+    // SPRINTER: Buff early/middle phases + MASSIVE final phase boost!
+    if (racer.style === 'Sprinter') {
+      if (phase === 'start') {
+        styleMultiplier *= 1.05; // +5% in start phase (was nothing!)
+      } else if (phase === 'middle') {
+        styleMultiplier *= 1.08; // +8% in middle phase (was nothing!)
+      } else if (phase === 'final') {
+        if (!racer.sprinterFinalPhaseLogged) {
+          racer.sprinterFinalPhaseLogged = true;
+          console.log(`🏃 [Sprinter Surge] ${racer.name} activating final speed! +22%`);
         }
-        styleMultiplier *= 1.15; // ANOTHER +15% in last 10%! (Total +40%!)
+        styleMultiplier *= 1.22; // +22% speed in final phase!
+        if (progress > 0.9) {
+          if (!racer.sprinterExplosionLogged) {
+            racer.sprinterExplosionLogged = true;
+            console.log(`🚀 [Sprinter Explosion] ${racer.name} going ALL OUT! +40% speed!`);
+          }
+          styleMultiplier *= 1.15; // ANOTHER +15% in last 10%! (Total +40%!)
+        }
       }
     }
     
-    // LEADER: Save stamina when ahead (will affect drain later)
+    // CHASER: Buff middle phase so they don't fall too far behind!
+    if (racer.style === 'Chaser' && phase === 'middle') {
+      styleMultiplier *= 1.08; // +8% middle phase (was nothing!)
+    }
+    
+    // LEADER: Save stamina when ahead (will affect drain later) - NERFED
     const leaderCondition = racer.style === 'Leader' && rank === 1 && progress < 0.6;
     if (leaderCondition) {
-      styleDrainMultiplier = 0.65; // 35% less drain when leading early!
+      styleDrainMultiplier = 0.80; // 20% less drain when leading early (nerfed from 35%)
       if (!racer.leaderStrategyActive) {
         racer.leaderStrategyActive = true;
-        console.log(`🎯 [Leader Strategy] ${racer.name} in 1st, conserving stamina (-35% drain)`);
+        console.log(`🎯 [Leader Strategy] ${racer.name} in 1st, conserving stamina (-20% drain)`);
       }
     } else {
       racer.leaderStrategyActive = false;
