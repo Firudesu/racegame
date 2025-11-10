@@ -501,6 +501,9 @@
       adaptability: clamp(Math.round((insight + resolve) / 2 * baseMult), 35, 95)
     };
     
+    // Track adaptability (performs well in dirty/wet conditions)
+    const trackAdaptability = clamp(Math.round((resolve * 0.5 + endurance * 0.35 + insight * 0.15) * baseMult), 35, 95);
+    
     return {
       maneuverBase,
       passingPower,
@@ -513,7 +516,8 @@
       aggression,
       zoneDecisionFactor,
       phasePower,
-      positioning
+      positioning,
+      trackAdaptability
     };
   }
 

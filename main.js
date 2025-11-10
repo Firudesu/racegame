@@ -291,7 +291,7 @@
 
       if (elements.startRace) {
         elements.startRace.addEventListener("click", () => {
-          startRace(false);
+          showStrategyModal();
         });
       }
 
@@ -412,6 +412,7 @@
     updateMoodUI();
 
       renderSkills();
+      renderSecondaryStats();
       renderLegacyGallery();
       renderRetiredStable();
       updateMenuState();
@@ -489,6 +490,51 @@
       li.innerHTML = `<strong>${skill.name}</strong><br/><small>${description} • ${rarityText}</small>`;
       elements.skillList.appendChild(li);
     });
+  }
+
+  function renderSecondaryStats() {
+    const container = document.getElementById('secondary-stats-display');
+    if (!container) return;
+    
+    const aptitudes = state.avatar.aptitudes || {};
+    const secondary = state.avatar.secondary || {};
+    const profile = state.avatar.profile || {};
+    
+    // Determine best distance
+    const distanceType = aptitudes.distance?.type || profile.aptitudes?.distance?.type || 'mid';
+    const distanceLabels = { sprint: 'Sprint (800m)', mid: 'Mid-Distance (1200m)', long: 'Long (1800m)' };
+    const distanceLabel = distanceLabels[distanceType] || 'Mid-Distance (1200m)';
+    
+    // Determine surface preference
+    const surfacePreferred = aptitudes.surface?.preferred || profile.aptitudes?.surface?.preferred || 'grass';
+    const surfaceLabel = surfacePreferred === 'dirt' ? 'Dirt' : 'Grass';
+    
+    container.innerHTML = `
+      <div class="secondary-stat-item">
+        <span class="secondary-stat-label">🏁 Best Distance</span>
+        <span class="secondary-stat-value">${distanceLabel}</span>
+      </div>
+      <div class="secondary-stat-item">
+        <span class="secondary-stat-label">🌱 Prefers</span>
+        <span class="secondary-stat-value">${surfaceLabel} Tracks</span>
+      </div>
+      <div class="secondary-stat-item">
+        <span class="secondary-stat-label">🌦️ Track Adaptability</span>
+        <span class="secondary-stat-value">${secondary.trackAdaptability || 60}</span>
+      </div>
+      <div class="secondary-stat-item">
+        <span class="secondary-stat-label">⚡ Passing Power</span>
+        <span class="secondary-stat-value">${secondary.passingPower || 60}</span>
+      </div>
+      <div class="secondary-stat-item">
+        <span class="secondary-stat-label">🎯 Pace Control</span>
+        <span class="secondary-stat-value">${secondary.paceControl || 60}</span>
+      </div>
+      <div class="secondary-stat-item">
+        <span class="secondary-stat-label">💪 Fatigue Resistance</span>
+        <span class="secondary-stat-value">${secondary.fatigueResistance || 60}</span>
+      </div>
+    `;
   }
 
   function formatSkillSummary(skill) {
@@ -2285,6 +2331,114 @@
     }
   }
 
+  function generateTrackConditions() {
+    const trackStates = ['clean', 'slightly_dirty', 'muddy'];
+    const weatherConditions = ['sunny', 'overcast', 'rainy'];
+    
+    const trackState = trackStates[Math.floor(Math.random() * trackStates.length)];
+    const weather = weatherConditions[Math.floor(Math.random() * weatherConditions.length)];
+    
+    let speedModifier = 1.0;
+    let staminaModifier = 1.0;
+    
+    // Track state effects
+    if (trackState === 'slightly_dirty') {
+      speedModifier *= 0.96;
+      staminaModifier *= 1.08;
+    } else if (trackState === 'muddy') {
+      speedModifier *= 0.88;
+      staminaModifier *= 1.20;
+    }
+    
+    // Weather effects
+    if (weather === 'rainy') {
+      speedModifier *= 0.94;
+      staminaModifier *= 1.10;
+    }
+    
+    return {
+      trackState,
+      weather,
+      speedModifier,
+      staminaModifier
+    };
+  }
+
+  function showStrategyModal() {
+    const modal = document.getElementById('strategy-modal');
+    if (!modal) return;
+    
+    // Generate track conditions
+    const conditions = generateTrackConditions();
+    state.currentTrackConditions = conditions;
+    
+    // Display track conditions
+    const conditionsDisplay = document.getElementById('track-conditions-display');
+    if (conditionsDisplay) {
+      const trackLabels = {
+        clean: 'Clean',
+        slightly_dirty: 'Slightly Dirty',
+        muddy: 'Muddy'
+      };
+      const weatherLabels = {
+        sunny: '☀️ Sunny',
+        overcast: '☁️ Overcast',
+        rainy: '🌧️ Rainy'
+      };
+      
+      const speedEffect = ((conditions.speedModifier - 1) * 100).toFixed(0);
+      const staminaEffect = ((conditions.staminaModifier - 1) * 100).toFixed(0);
+      const speedText = speedEffect >= 0 ? `+${speedEffect}%` : `${speedEffect}%`;
+      const staminaText = staminaEffect >= 0 ? `+${staminaEffect}%` : `${staminaEffect}%`;
+      
+      conditionsDisplay.innerHTML = `
+        <h4>🏁 Track Conditions</h4>
+        <div class="condition-item">
+          <span class="condition-label">Track State:</span>
+          <span class="condition-value">${trackLabels[conditions.trackState]}</span>
+        </div>
+        <div class="condition-item">
+          <span class="condition-label">Weather:</span>
+          <span class="condition-value">${weatherLabels[conditions.weather]}</span>
+        </div>
+        <div class="condition-effects">
+          <div class="condition-warning">Effects: Speed ${speedText}, Stamina Drain ${staminaText}</div>
+          <div style="font-size: 0.8rem; margin-top: 4px;">High adaptability reduces penalties!</div>
+        </div>
+      `;
+    }
+    
+    // Show modal
+    modal.hidden = false;
+    modal.style.display = 'flex';
+    
+    // Add strategy button listeners
+    const strategyButtons = modal.querySelectorAll('.strategy-btn');
+    strategyButtons.forEach(btn => {
+      const newBtn = btn.cloneNode(true);
+      btn.replaceWith(newBtn);
+      newBtn.addEventListener('click', () => {
+        const strategy = newBtn.dataset.strategy;
+        selectStrategy(strategy);
+      });
+    });
+  }
+
+  function selectStrategy(strategy) {
+    console.log(`[Strategy] Player selected: ${strategy}`);
+    state.selectedStrategy = strategy;
+    
+    // Hide modal
+    const modal = document.getElementById('strategy-modal');
+    if (modal) {
+      modal.hidden = true;
+      modal.style.display = 'none';
+    }
+    
+    // Start race with selected strategy
+    startRace(false);
+  }
+
   function startRace(isReplay) {
     if (state.race && state.race.running) {
       return;
@@ -2391,7 +2545,8 @@
       racers.push(aiRacer);
     });
 
-    assignInitialLanes(racers);
+    // Lanes are now assigned in buildRacer() with random assignment
+    // assignInitialLanes(racers);
 
     return {
       seed: config.seed,
@@ -2432,8 +2587,26 @@
       aptitudes
     }) {
     const maxEnergy = 100 + stats.endurance * 10;
-    const useStyle = style || "Pacer";
+    
+    // Override style with selected strategy (only for player)
+    let useStyle = style || "Pacer";
+    if (isPlayer && state.selectedStrategy) {
+      useStyle = state.selectedStrategy;
+      console.log(`[Strategy Override] Player using: ${useStyle} (selected in modal)`);
+    }
     const styleLabel = styleName || useStyle;
+    
+    // Random starting lane assignment
+    const startingLanes = [0, 1, 2]; // Inside, Mid, Outside
+    const randomLane = startingLanes[Math.floor(Math.random() * startingLanes.length)];
+    
+    // Starting break variance based on Insight stat
+    const insightStat = stats.insight || 50;
+    const breakVariance = (Math.random() - 0.5) * (1 - insightStat / 150);
+    // High insight = better reaction (-0.17 to +0.17s for insight 100)
+    // Low insight = worse reaction (-0.43 to +0.43s for insight 20)
+    
+    console.log(`[Starting Setup] ${name} - Lane: ${randomLane}, Break Delay: ${breakVariance.toFixed(3)}s`);
       const effectiveModifiers = modifiers
         ? { ...modifiers }
         : {
@@ -2451,12 +2624,28 @@
         baseProfile.secondary || deriveSecondaryStats(stats, effectiveModifiers, baseAptitudes);
     const maneuverAdjusted = applyStyleAdjustments(perfSource, useStyle);
     // Reduced speed stat dominance for closer races
-    const baseSpeed = Math.max(4, 4.0 + maneuverAdjusted.speed * 0.03);
+    // Apply track conditions with adaptability
+    const trackConditions = state.currentTrackConditions || { speedModifier: 1.0, staminaModifier: 1.0 };
+    const trackAdaptability = secondaryProfile?.trackAdaptability || 60;
+    const adaptabilityFactor = trackAdaptability / 100; // 0.35 to 0.95
+    
+    // High adaptability reduces penalties
+    const speedPenalty = (1 - trackConditions.speedModifier);
+    const staminaPenalty = (trackConditions.staminaModifier - 1);
+    
+    const adjustedSpeedMod = 1 - (speedPenalty * (1 - adaptabilityFactor * 0.6));
+    const adjustedStaminaMod = 1 + (staminaPenalty * (1 - adaptabilityFactor * 0.5));
+    
+    if (isPlayer) {
+      console.log(`[Track Conditions] Adaptability: ${trackAdaptability}, Speed: ${(adjustedSpeedMod * 100).toFixed(1)}%, Stamina: ${(adjustedStaminaMod * 100).toFixed(1)}%`);
+    }
+    
+    const baseSpeed = Math.max(4, 4.0 + maneuverAdjusted.speed * 0.03) * adjustedSpeedMod;
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
     // AGGRESSIVE DRAIN: Stamina is a strategic resource (finish with 0-20% energy)
-  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 5.0);
+  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 5.0) * adjustedStaminaMod;
 
     const racerObj = {
       id,
@@ -2496,7 +2685,10 @@
       baseSpeed,
       maxSpeed,
       acceleration,
-      lane: 0,
+      lane: randomLane,
+      startingLane: randomLane,
+      startingBreakDelay: breakVariance,
+      hasStarted: false,
       passCooldown: 0,
       strategyCooldown: 0,
       startAggro: 0,
@@ -2903,6 +3095,21 @@
       racer.skillToast.timer -= dt;
       if (racer.skillToast.timer <= 0) {
         racer.skillToast = null;
+      }
+    }
+
+    // Starting break delay - horse hasn't broken from gate yet
+    if (!racer.hasStarted) {
+      const raceStartTime = racer.startingBreakDelay || 0;
+      if (race.time < raceStartTime) {
+        racer.speed = 0;
+        racer.distance = 0;
+        return; // Don't move until break time
+      } else {
+        racer.hasStarted = true;
+        if (racer.isPlayer) {
+          console.log(`[Break] ${racer.name} broke from gate at ${race.time.toFixed(2)}s (delay: ${raceStartTime.toFixed(3)}s)`);
+        }
       }
     }
 

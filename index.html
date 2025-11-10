@@ -81,6 +81,13 @@
             </div>
           </section>
 
+          <section class="secondary-stats">
+            <h3>Racing Profile</h3>
+            <div class="secondary-stats-grid" id="secondary-stats-display">
+              <!-- Populated by JavaScript -->
+            </div>
+          </section>
+
           <section class="skills">
             <h2>Skills</h2>
             <ul id="skill-list"></ul>
@@ -232,6 +239,56 @@
       <div class="modal-actions">
         <button id="results-back" class="primary">Back to Menu</button>
         <button id="results-replay" class="secondary">Replay Race</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pre-Race Strategy Modal -->
+  <div id="strategy-modal" class="modal" hidden>
+    <div class="modal-content strategy-modal">
+      <h2>🎯 Choose Your Racing Strategy</h2>
+      <p class="modal-subtitle">Select your tactic for this race</p>
+      
+      <div class="strategy-options">
+        <button class="strategy-btn" data-strategy="Leader">
+          <div class="strategy-icon">🏃</div>
+          <div class="strategy-info">
+            <h3>Leader</h3>
+            <p class="strategy-desc">Control from the front</p>
+            <div class="strategy-bonus">+10% start speed • Saves stamina when ahead</div>
+          </div>
+        </button>
+
+        <button class="strategy-btn" data-strategy="Pacer">
+          <div class="strategy-icon">⚖️</div>
+          <div class="strategy-info">
+            <h3>Pacer</h3>
+            <p class="strategy-desc">Steady & balanced</p>
+            <div class="strategy-bonus">+5% all phases • Optimal energy management</div>
+          </div>
+        </button>
+
+        <button class="strategy-btn" data-strategy="Chaser">
+          <div class="strategy-icon">⚡</div>
+          <div class="strategy-info">
+            <h3>Chaser</h3>
+            <p class="strategy-desc">Late burst closer</p>
+            <div class="strategy-bonus">Saves energy • +20% final phase speed</div>
+          </div>
+        </button>
+
+        <button class="strategy-btn" data-strategy="Sprinter">
+          <div class="strategy-icon">🚀</div>
+          <div class="strategy-info">
+            <h3>Sprinter</h3>
+            <p class="strategy-desc">All-out speed</p>
+            <div class="strategy-bonus">+15% final burst • High stamina cost</div>
+          </div>
+        </button>
+      </div>
+
+      <div class="track-conditions" id="track-conditions-display">
+        <!-- Populated by JavaScript -->
       </div>
     </div>
   </div>
