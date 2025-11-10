@@ -2693,8 +2693,8 @@
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // NUCLEAR DRAIN: Force EVERYONE to finish exhausted (20-30% stamina!)
-  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 11.0) * adjustedStaminaMod;
+    // BALANCED DRAIN: Target 40-60% stamina at finish
+  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 5.5) * adjustedStaminaMod;
 
     const racerObj = {
       id,
@@ -3049,7 +3049,7 @@
 
   function decideSprint(racer, race, progress, phase, rank, staminaRatio) {
     // Don't sprint if too tired
-    if (staminaRatio < 0.35) {
+    if (staminaRatio < 0.25) {
       return { sprint: false, reason: "" };
     }
     
@@ -3354,7 +3354,7 @@
     
     // Decide if we should sprint (if not already sprinting)
     // NO SPRINT LIMIT! Constrained naturally by stamina and cooldown
-    if (!racer.sprintMode && racer.sprintCooldown <= 0 && staminaRatio > 0.30) {
+    if (!racer.sprintMode && racer.sprintCooldown <= 0 && staminaRatio > 0.20) {
       const shouldSprint = decideSprint(racer, race, progress, phase, rank, staminaRatio);
       if (shouldSprint.sprint) {
         racer.sprintMode = true;
@@ -3564,7 +3564,7 @@
       rngJitter;
 
     if (racer.energy <= 0) {
-      targetSpeed *= 0.58;
+      targetSpeed *= 0.80;
       if (!racer.depleted) {
         racer.depleted = true;
         console.log(`💔 [Exhausted] ${racer.name} out of stamina! Speed reduced to 58%`);
