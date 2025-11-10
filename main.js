@@ -2577,7 +2577,8 @@
       playerSnapshot: deepClone(config.playerSnapshot),
       leaderboard: racers.slice(),
       debugPhase: null,
-      loggedRoster: false
+      loggedRoster: false,
+      trackConditions: state.currentTrackConditions || { speedModifier: 1.0, staminaModifier: 1.0 }
     };
   }
 
@@ -2654,8 +2655,8 @@
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // INCREASED DRAIN: Target 15-35% energy at finish for strategic racing
-  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 4.2) * adjustedStaminaMod;
+    // INCREASED DRAIN: Target 20-35% energy at finish for strategic racing
+  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 5.5) * adjustedStaminaMod;
 
     const racerObj = {
       id,
@@ -2708,6 +2709,13 @@
       finalBurst: false,
       finalBurstTimer: 0,
       lastPassAttempt: 0,
+      sprintMode: false,
+      sprintTimer: 0,
+      sprintCooldown: 0,
+      sprintsUsed: 0,
+      maxSprints: 3, // Can sprint 3 times per race
+      sprinterFinalPhaseLogged: false,
+      sprinterExplosionLogged: false,
       isBlocked: false,
       lowStaminaNotified: false,
       lastBlockDrain: 0,
@@ -2971,6 +2979,114 @@
     }
   }
 
+  function decideSprint(racer, race, progress, phase, rank, staminaRatio) {
+    // Don't sprint if too tired
+    if (staminaRatio < 0.35) {
+      return { sprint: false, reason: "" };
+    }
+    
+    // Get track conditions at current position
+    const trackConditions = race.trackConditions || state.currentTrackConditions || { speedModifier: 1.0 };
+    const trackAdaptability = racer.secondary?.trackAdaptability || 60;
+    const isCleanTrack = trackConditions.speedModifier > 0.95 || trackAdaptability > 70;
+    
+    // Calculate gap to leader
+    const leader = race.leaderboard[0];
+    const gapToLeader = leader ? (leader.distance - racer.distance) : 0;
+    const gapInUnits = Math.abs(gapToLeader);
+    const isFallingBehind = gapInUnits > 30;
+    const isCloseRace = gapInUnits < 20;
+    
+    // Calculate gap to horse ahead
+    const aheadHorses = race.racers.filter(r => !r.finished && r.distance > racer.distance);
+    const closestAhead = aheadHorses.length > 0 ? 
+      aheadHorses.reduce((prev, curr) => 
+        Math.abs(curr.distance - racer.distance) < Math.abs(prev.distance - racer.distance) ? curr : prev
+      ) : null;
+    const gapAhead = closestAhead ? (closestAhead.distance - racer.distance) : 999;
+    const canOvertake = gapAhead < 25 && gapAhead > 0;
+    
+    // Check if being challenged from behind
+    const behindHorses = race.racers.filter(r => !r.finished && r.distance < racer.distance);
+    const closestBehind = behindHorses.length > 0 ?
+      behindHorses.reduce((prev, curr) =>
+        Math.abs(curr.distance - racer.distance) < Math.abs(prev.distance - racer.distance) ? curr : prev
+      ) : null;
+    const gapBehind = closestBehind ? (racer.distance - closestBehind.distance) : 999;
+    const beingChallenged = gapBehind < 20;
+    
+    // STRATEGY-BASED SPRINT DECISIONS
+    const style = racer.style;
+    const aggression = racer.aggressionRating || 60;
+    
+    // LEADER: Sprint to break away or defend position
+    if (style === 'Leader') {
+      if (rank === 1 && beingChallenged && staminaRatio > 0.5) {
+        return { sprint: true, reason: "Defending lead from challenge!" };
+      }
+      if (rank === 1 && isCloseRace && phase === 'middle' && staminaRatio > 0.6 && isCleanTrack) {
+        return { sprint: true, reason: "Breaking away on clean track!" };
+      }
+      if (rank === 2 && gapInUnits < 15 && staminaRatio > 0.55 && isCleanTrack) {
+        return { sprint: true, reason: "Challenging for lead!" };
+      }
+    }
+    
+    // PACER: Sprint at key tactical moments
+    if (style === 'Pacer') {
+      if (canOvertake && staminaRatio > 0.5 && isCleanTrack && phase === 'middle') {
+        return { sprint: true, reason: "Tactical overtake on clean track!" };
+      }
+      if (isFallingBehind && staminaRatio > 0.55 && phase === 'middle') {
+        return { sprint: true, reason: "Closing gap to maintain pace!" };
+      }
+      if (phase === 'final' && rank > 2 && staminaRatio > 0.45 && canOvertake) {
+        return { sprint: true, reason: "Final phase positioning!" };
+      }
+    }
+    
+    // CHASER: Save stamina, sprint in final phase
+    if (style === 'Chaser') {
+      if (phase === 'final' && staminaRatio > 0.5) {
+        if (canOvertake && isCleanTrack) {
+          return { sprint: true, reason: "Final phase attack with saved stamina!" };
+        }
+        if (isFallingBehind && staminaRatio > 0.55) {
+          return { sprint: true, reason: "Closing gap for final sprint!" };
+        }
+      }
+      // Early/middle: only sprint if desperately falling behind
+      if (phase !== 'final' && isFallingBehind && gapInUnits > 50 && staminaRatio > 0.7) {
+        return { sprint: true, reason: "Emergency sprint to stay in touch!" };
+      }
+    }
+    
+    // SPRINTER: Multiple short bursts throughout
+    if (style === 'Sprinter') {
+      if (phase === 'start' && aggression > 65 && staminaRatio > 0.7 && isCleanTrack) {
+        return { sprint: true, reason: "Aggressive early burst!" };
+      }
+      if (phase === 'middle' && canOvertake && staminaRatio > 0.55 && isCleanTrack) {
+        return { sprint: true, reason: "Mid-race overtake!" };
+      }
+      if (phase === 'final' && (canOvertake || rank > 2) && staminaRatio > 0.4) {
+        return { sprint: true, reason: "Sprinter final burst!" };
+      }
+    }
+    
+    // UNIVERSAL: Sprint if desperately falling behind with good stamina
+    if (isFallingBehind && gapInUnits > 60 && staminaRatio > 0.65 && phase !== 'start') {
+      return { sprint: true, reason: "Desperate sprint to close major gap!" };
+    }
+    
+    // TRACK CONDITIONS: Avoid sprinting in bad conditions unless desperate
+    if (!isCleanTrack && trackConditions.speedModifier < 0.92 && !isFallingBehind) {
+      return { sprint: false, reason: "" };
+    }
+    
+    return { sprint: false, reason: "" };
+  }
+
   function computeSlipstreamMultiplier(racer, race) {
     if (!racer.slipstreamBonus) return 1;
     let bonus = 1;
@@ -3149,6 +3265,38 @@
     // Racing style strategic bonuses (for styleMultiplier)
     const rank = getRank(racer, race.leaderboard);
     
+    // ============================================
+    // DYNAMIC SPRINT SYSTEM
+    // ============================================
+    racer.sprintCooldown = Math.max(0, racer.sprintCooldown - dt);
+    racer.sprintTimer = Math.max(0, racer.sprintTimer - dt);
+    
+    // End sprint if timer expires
+    if (racer.sprintMode && racer.sprintTimer <= 0) {
+      racer.sprintMode = false;
+      console.log(`💨 [Sprint End] ${racer.name} easing off (cooldown: 8s)`);
+      racer.sprintCooldown = 8.0;
+    }
+    
+    // Decide if we should sprint (if not already sprinting)
+    if (!racer.sprintMode && racer.sprintCooldown <= 0 && racer.sprintsUsed < racer.maxSprints) {
+      const shouldSprint = decideSprint(racer, race, progress, phase, rank, staminaRatio);
+      if (shouldSprint.sprint) {
+        racer.sprintMode = true;
+        racer.sprintTimer = 3.0 + (racer.stats.resolve / 100); // 3-4 second sprint
+        racer.sprintsUsed++;
+        console.log(`🏃‍♂️ [Sprint] ${racer.name} pushing hard! ${shouldSprint.reason}`);
+      }
+    }
+    
+    let sprintMultiplier = 1.0;
+    let sprintDrainMultiplier = 1.0;
+    if (racer.sprintMode) {
+      sprintMultiplier = 1.25; // +25% speed while sprinting!
+      sprintDrainMultiplier = 2.5; // Burn stamina 2.5x faster!
+    }
+    // ============================================
+    
     // PACER: Optimal stamina management
     if (racer.style === 'Pacer' && staminaRatio > 0.4 && staminaRatio < 0.8) {
       styleMultiplier *= 1.08; // +8% when managing well
@@ -3169,14 +3317,17 @@
     
     // SPRINTER: MASSIVE final phase boost!
     if (racer.style === 'Sprinter' && phase === 'final') {
+      if (!racer.sprinterFinalPhaseLogged) {
+        racer.sprinterFinalPhaseLogged = true;
+        console.log(`🏃 [Sprinter Surge] ${racer.name} activating final speed! +22%`);
+      }
       styleMultiplier *= 1.22; // +22% speed in final phase!
       if (progress > 0.9) {
-        styleMultiplier *= 1.15; // ANOTHER +15% in last 10%! (Total +40%!)
-        if (racer.isPlayer || Math.random() < 0.08) {
+        if (!racer.sprinterExplosionLogged) {
+          racer.sprinterExplosionLogged = true;
           console.log(`🚀 [Sprinter Explosion] ${racer.name} going ALL OUT! +40% speed!`);
         }
-      } else if (racer.isPlayer || Math.random() < 0.04) {
-        console.log(`🏃 [Sprinter Surge] ${racer.name} activating final speed! +22%`);
+        styleMultiplier *= 1.15; // ANOTHER +15% in last 10%! (Total +40%!)
       }
     }
     
@@ -3219,6 +3370,7 @@
     let targetSpeed =
       baseSpeed *
       styleMultiplier *
+      sprintMultiplier * // SPRINT BOOST!
       energyFactor *
       skillMultiplier *
       resolveBoost *
@@ -3275,6 +3427,7 @@
         shieldFactor *
         paceDrainFactor *
         styleDrainMultiplier * // Racing style affects drain!
+        sprintDrainMultiplier * // SPRINT DRAIN!
         dt;
     spendStamina(racer, maintainCost, "maintain", race);
 
