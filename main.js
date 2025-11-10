@@ -2692,8 +2692,8 @@
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // VERY AGGRESSIVE DRAIN: Force all horses to push hard (no coasting to victory!)
-  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 8.5) * adjustedStaminaMod;
+    // NUCLEAR DRAIN: Force EVERYONE to finish exhausted (20-30% stamina!)
+  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 11.0) * adjustedStaminaMod;
 
     const racerObj = {
       id,
@@ -3327,7 +3327,7 @@
     if (racer.sprintMode && racer.sprintTimer <= 0) {
       racer.sprintMode = false;
       const burstFreqRating = racer.secondary?.burstFrequency || 60;
-      const cooldown = 9.0 - (burstFreqRating - 35) / 25; // 6.6s to 9.0s based on stat
+      const cooldown = 5.5 - (burstFreqRating - 35) / 40; // 4.0s to 5.5s based on stat (MORE FREQUENT!)
       console.log(`💨 [Sprint End] ${racer.name} easing off (cooldown: ${cooldown.toFixed(1)}s)`);
       racer.sprintCooldown = cooldown;
     }
@@ -3393,24 +3393,24 @@
       racer.chaserStrategyActive = false;
     }
     
-    // SPRINTER: Buff early/middle phases + MASSIVE final phase boost!
+    // SPRINTER: Buff early/middle phases + BIG final phase boost! (NERFED)
     if (racer.style === 'Sprinter') {
       if (phase === 'start') {
-        styleMultiplier *= 1.05; // +5% in start phase (was nothing!)
+        styleMultiplier *= 1.03; // +3% in start phase (nerfed from +5%)
       } else if (phase === 'middle') {
-        styleMultiplier *= 1.08; // +8% in middle phase (was nothing!)
+        styleMultiplier *= 1.05; // +5% in middle phase (nerfed from +8%)
       } else if (phase === 'final') {
         if (!racer.sprinterFinalPhaseLogged) {
           racer.sprinterFinalPhaseLogged = true;
-          console.log(`🏃 [Sprinter Surge] ${racer.name} activating final speed! +22%`);
+          console.log(`🏃 [Sprinter Surge] ${racer.name} activating final speed! +18%`);
         }
-        styleMultiplier *= 1.22; // +22% speed in final phase!
+        styleMultiplier *= 1.18; // +18% speed in final phase! (nerfed from +22%)
         if (progress > 0.9) {
           if (!racer.sprinterExplosionLogged) {
             racer.sprinterExplosionLogged = true;
-            console.log(`🚀 [Sprinter Explosion] ${racer.name} going ALL OUT! +40% speed!`);
+            console.log(`🚀 [Sprinter Explosion] ${racer.name} going ALL OUT! +30% speed!`);
           }
-          styleMultiplier *= 1.15; // ANOTHER +15% in last 10%! (Total +40%!)
+          styleMultiplier *= 1.10; // ANOTHER +10% in last 10%! (Total +30%!) (nerfed from +15%)
         }
       }
     }
