@@ -3812,6 +3812,19 @@
       race.animationId = null;
     }
     elements.startRace.disabled = false;
+    
+    // 🔍 LOG ALL RACER STATS AT RACE END
+    console.log('\n='.repeat(60));
+    console.log('📊 FINAL RACE STATS (ALL RACERS)');
+    console.log('='.repeat(60));
+    race.finishedOrder.forEach((racer, index) => {
+      const finalStamina = Math.round((racer.energy / racer.maxEnergy) * 100);
+      console.log(`\n${index + 1}. ${racer.name} (${racer.style}) - ${racer.finishTime.toFixed(1)}s`);
+      console.log(`   Base Speed: ${racer.baseSpeed.toFixed(3)}, Max Speed: ${racer.maxSpeed.toFixed(3)}`);
+      console.log(`   Stats: Stride=${racer.stats.stride}, End=${racer.stats.endurance}, Force=${racer.stats.force}`);
+      console.log(`   Final Stamina: ${finalStamina}%, Sprints Used: ${racer.sprintsUsed || 0}`);
+    });
+    console.log('='.repeat(60) + '\n');
     showResults(race);
   }
 
@@ -3844,10 +3857,14 @@
 
       const roleLabel = racer.isPlayer ? "Player" : "AI";
       const styleName = racer.style || racer.styleName || "--";
+      const finalStamina = Math.round((racer.energy / racer.maxEnergy) * 100);
+      const baseSpeedDisplay = racer.baseSpeed ? racer.baseSpeed.toFixed(3) : "N/A";
       div.innerHTML = `
         <div>
           <strong>${index + 1}. ${racer.name}</strong><br/>
-          <small>${roleLabel} • ${styleName}</small>
+          <small>${roleLabel} • ${styleName}</small><br/>
+          <small style="color: #888;">Base Speed: ${baseSpeedDisplay} | Stride: ${racer.stats?.stride || "?"} | End: ${racer.stats?.endurance || "?"}</small><br/>
+          <small style="color: #888;">Sprints: ${racer.sprintsUsed || 0} | Final Stamina: ${finalStamina}%</small>
         </div>
         <div>
           <div>${timeLabel}</div>
