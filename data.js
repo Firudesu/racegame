@@ -148,7 +148,7 @@
     {
       name: "Risk Push",
       type: "active",
-      trigger: "final",
+      trigger: "start",
       boost: 0.28,
       duration: 2.2,
       rarity: 4,
