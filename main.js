@@ -3589,6 +3589,22 @@
 
     racer.speed = updatedSpeed;
     racer.distance += (updatedSpeed * dt) / (racer.distanceMultiplier || 1);
+    
+    // 🔍 DEBUG: Periodic speed calculation logging (every 10s for player)
+    if (racer.isPlayer && !racer.debugTimer) racer.debugTimer = 0;
+    if (racer.isPlayer) {
+      racer.debugTimer += dt;
+      if (racer.debugTimer >= 10) {
+        racer.debugTimer = 0;
+        const maintainCostPreview = racer.baseDrain * Math.max(0.4, Math.min(1.3, updatedSpeed / Math.max(1, racer.baseSpeed)));
+        console.log(`\n📊 [SPEED DEBUG @ ${race.time.toFixed(1)}s] ${racer.name}:`);
+        console.log(`   Current Speed: ${racer.speed.toFixed(3)}, Target: ${targetSpeed.toFixed(3)}, Base: ${baseSpeed.toFixed(3)}`);
+        console.log(`   Multipliers: Style=${styleMultiplier.toFixed(3)}, Sprint=${sprintMultiplier.toFixed(3)}, Section=${trackSectionMultiplier.toFixed(3)}, Energy=${energyFactor.toFixed(3)}`);
+        console.log(`   Distance: ${racer.distance.toFixed(1)}/${race.trackLength}, Progress: ${(progress*100).toFixed(1)}%`);
+        console.log(`   Stamina: ${racer.energy.toFixed(1)}/${racer.maxEnergy} (${(staminaRatio*100).toFixed(0)}%), Est Drain: ${maintainCostPreview.toFixed(3)}/s`);
+        console.log(`   Phase: ${phase}, Rank: ${rank}/${race.racers.length}\n`);
+      }
+    }
 
     const intensity = Math.max(0.4, Math.min(1.3, updatedSpeed / Math.max(1, racer.baseSpeed)));
     const shieldFactor = racer.staminaShieldActive ?? racer.staminaShieldBase ?? 1;
