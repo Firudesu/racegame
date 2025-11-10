@@ -2650,12 +2650,12 @@
       console.log(`[Track Conditions] Adaptability: ${trackAdaptability}, Speed: ${(adjustedSpeedMod * 100).toFixed(1)}%, Stamina: ${(adjustedStaminaMod * 100).toFixed(1)}%`);
     }
     
-    const baseSpeed = Math.max(4, 4.0 + maneuverAdjusted.speed * 0.03) * adjustedSpeedMod;
+    const baseSpeed = Math.max(4, 4.2 + maneuverAdjusted.speed * 0.025) * adjustedSpeedMod; // Closer speed ranges!
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // REDUCED DRAIN: Horses should finish with 15-35% energy for close races
-  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 3.5) * adjustedStaminaMod;
+    // INCREASED DRAIN: Target 15-35% energy at finish for strategic racing
+  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 4.2) * adjustedStaminaMod;
 
     const racerObj = {
       id,
@@ -2974,6 +2974,7 @@
   function computeSlipstreamMultiplier(racer, race) {
     if (!racer.slipstreamBonus) return 1;
     let bonus = 1;
+    let closestName = null;
     const threshold = 30;
     race.racers.forEach((other) => {
       if (other === racer || other.finished) return;
@@ -2981,9 +2982,17 @@
       const zoneSeparation = Math.abs((other.zoneOffset || 0) - (racer.zoneOffset || 0));
       if (delta > 0 && delta < threshold && zoneSeparation <= 28) {
         const scaled = 1 + racer.slipstreamBonus * (1 - delta / threshold);
-        bonus = Math.max(bonus, scaled);
+        if (scaled > bonus) {
+          bonus = scaled;
+          closestName = other.name;
+        }
       }
     });
+    // Log slipstream bonus
+    if ((racer.isPlayer || Math.random() < 0.02) && bonus > 1.01 && closestName) {
+      const bonusPct = ((bonus - 1) * 100).toFixed(1);
+      console.log(`🌀 [Slipstream] ${racer.name} drafting behind ${closestName}! +${bonusPct}% speed`);
+    }
     return bonus;
   }
 
@@ -3143,6 +3152,9 @@
     // PACER: Optimal stamina management
     if (racer.style === 'Pacer' && staminaRatio > 0.4 && staminaRatio < 0.8) {
       styleMultiplier *= 1.08; // +8% when managing well
+      if (racer.isPlayer || Math.random() < 0.03) {
+        console.log(`⚖️ [Pacer Strategy] ${racer.name} in stamina sweet spot! +8% speed`);
+      }
     }
     
     // CHASER: Burn stamina for final burst (will affect drain later)
@@ -3150,11 +3162,30 @@
     if (racer.style === 'Chaser' && phase === 'final' && rank > 2) {
       styleDrainMultiplier = 1.35; // Burn more stamina
       styleMultiplier *= 1.12; // Get extra speed!
+      if (racer.isPlayer || Math.random() < 0.05) {
+        console.log(`⚡ [Chaser Strategy] ${racer.name} burning stamina for final push! +12% speed`);
+      }
+    }
+    
+    // SPRINTER: MASSIVE final phase boost!
+    if (racer.style === 'Sprinter' && phase === 'final') {
+      styleMultiplier *= 1.22; // +22% speed in final phase!
+      if (progress > 0.9) {
+        styleMultiplier *= 1.15; // ANOTHER +15% in last 10%! (Total +40%!)
+        if (racer.isPlayer || Math.random() < 0.08) {
+          console.log(`🚀 [Sprinter Explosion] ${racer.name} going ALL OUT! +40% speed!`);
+        }
+      } else if (racer.isPlayer || Math.random() < 0.04) {
+        console.log(`🏃 [Sprinter Surge] ${racer.name} activating final speed! +22%`);
+      }
     }
     
     // LEADER: Save stamina when ahead (will affect drain later)
     if (racer.style === 'Leader' && rank === 1 && progress < 0.6) {
       styleDrainMultiplier = 0.65; // 35% less drain when leading early!
+      if (racer.isPlayer || Math.random() < 0.05) {
+        console.log(`🎯 [Leader Strategy] ${racer.name} in 1st, conserving stamina (-35% drain)`);
+      }
     }
     
       const paceControl = racer.secondary?.paceControl ?? 60;
@@ -3176,6 +3207,8 @@
         spendStamina(racer, FINAL_SPRINT_COST, "final_sprint", race);
         racer.finalBurst = true;
         racer.finalBurstTimer = 2.5 + racer.stats.resolve / 140;
+        const burstBonus = ((0.08 + racer.stats.resolve / 400) * 100).toFixed(0);
+        console.log(`💨 [Final Sprint] ${racer.name} activated final burst! +${burstBonus}% speed for ${racer.finalBurstTimer.toFixed(1)}s`);
       }
       if (racer.finalBurstTimer > 0) {
         finalBurstMultiplier += 0.08 + racer.stats.resolve / 400;
@@ -3197,7 +3230,10 @@
 
     if (racer.energy <= 0) {
       targetSpeed *= 0.58;
-      racer.depleted = true;
+      if (!racer.depleted) {
+        racer.depleted = true;
+        console.log(`💔 [Exhausted] ${racer.name} out of stamina! Speed reduced to 58%`);
+      }
     }
 
     const currentSpeed = racer.speed || 0;

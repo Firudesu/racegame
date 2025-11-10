@@ -950,9 +950,9 @@
         // Move forward
         racer.distance += speed * TRACK_STEP;
         
-        // Drain stamina (REDUCED - horses should finish with 15-35% energy!)
+        // Drain stamina (INCREASED - target 15-35% energy at finish!)
         const intensity = speed / baseSpeed;
-        let baseDrain = 3.5 * TRACK_STEP * intensity; // Reduced from 5.0 for closer races!
+        let baseDrain = 4.2 * TRACK_STEP * intensity; // Increased from 3.5 for strategic racing!
         
         // Apply paceControl from secondary stats (MAJOR impact!)
         const paceControl = racer.profile?.secondary?.paceControl || 60;
