@@ -3352,7 +3352,9 @@
         racer.sprintMode = true;
         racer.sprintTimer = 3.0 + (racer.stats.resolve / 100); // 3-4 second sprint
         racer.sprintsUsed++;
+        const sprintPowerBoost = ((1.15 + ((racer.secondary?.sprintPower || 60) - 60) / 143) - 1) * 100;
         console.log(`🏃‍♂️ [Sprint #${racer.sprintsUsed}] ${racer.name} pushing hard! ${shouldSprint.reason}`);
+        console.log(`   💨 Sprint Power: +${sprintPowerBoost.toFixed(1)}%, Duration: ${racer.sprintTimer.toFixed(1)}s, Stamina: ${(staminaRatio*100).toFixed(0)}%`);
       }
     }
     
