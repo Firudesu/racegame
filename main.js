@@ -2781,6 +2781,18 @@
     applyAptitudeModifiers(racerObj);
       applySecondarySynergy(racerObj);
     initializeZoneState(racerObj, DEFAULT_ZONE_INDEX);
+    
+    // 🔍 DEBUG: Log complete racer build stats
+    console.log(`\n🏇 [RACER BUILD] ${name} (${useStyle})`);
+    console.log(`  📊 Primary Stats: Stride=${stats.stride}, End=${stats.endurance}, Force=${stats.force}, Resolve=${stats.resolve}, Insight=${stats.insight}`);
+    console.log(`  ⚡ Performance: Speed=${maneuverAdjusted.speed}, Handling=${maneuverAdjusted.handling}, Maneuver=${maneuverAdjusted.maneuver}`);
+    console.log(`  🏎️ Base Speed: ${baseSpeed.toFixed(3)}, Max Speed: ${maxSpeed.toFixed(3)}, Acceleration: ${acceleration.toFixed(2)}`);
+    console.log(`  💧 Stamina Drain: ${staminaDrain.toFixed(3)}/s, Max Energy: ${maxEnergy}`);
+    console.log(`  🚀 Sprint - Power: ${secondaryProfile?.sprintPower || 60}, Efficiency: ${secondaryProfile?.sprintEfficiency || 60}, Frequency: ${secondaryProfile?.burstFrequency || 60}`);
+    console.log(`  💚 Stamina Recovery: ${secondaryProfile?.staminaRecovery || 60}`);
+    console.log(`  🎯 Secondary Stats: Passing=${secondaryProfile?.passingPower || 60}, Pace=${secondaryProfile?.paceControl || 60}, Fatigue=${secondaryProfile?.fatigueResistance || 60}`);
+    console.log(`  🎲 Skills: ${skills.map(s => `${s.name} (${s.trigger})`).join(', ') || 'None'}\n`);
+    
     return racerObj;
   }
 
@@ -3666,7 +3678,14 @@
 
         chance = clamp(chance, racer.isPlayer ? 0.35 : 0.55, 0.96);
 
-      if (sampleRng(race) < chance) {
+      // 🔍 DEBUG: Log skill activation attempt
+      const roll = sampleRng(race);
+      if (racer.isPlayer || roll < chance) {
+        console.log(`🎲 [SKILL CHECK] ${racer.name} - ${skill.name} (${phase}): Chance=${(chance*100).toFixed(1)}%, Roll=${(roll*100).toFixed(1)}% ${roll < chance ? '✅ SUCCESS!' : '❌ Failed'}`);
+        console.log(`   Insight=${racer.stats.insight}, ProcRating=${procRating}, Mood=${moodPercent}%, Stamina=${(staminaRatio*100).toFixed(0)}%`);
+      }
+      
+      if (roll < chance) {
         skill.active = true;
         // LONGER DURATION: 2.0x for major impact!
         skill.timer = (skill.duration || 4) * 2.0;
