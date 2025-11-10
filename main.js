@@ -3697,11 +3697,13 @@
 
         chance = clamp(chance, racer.isPlayer ? 0.35 : 0.55, 0.96);
 
-      // 🔍 DEBUG: Log skill activation attempt
+      // 🔍 DEBUG: Log skill activation attempt (ALWAYS for player, only success for AI)
       const roll = sampleRng(race);
-      if (racer.isPlayer || roll < chance) {
+      if (racer.isPlayer) {
         console.log(`🎲 [SKILL CHECK] ${racer.name} - ${skill.name} (${phase}): Chance=${(chance*100).toFixed(1)}%, Roll=${(roll*100).toFixed(1)}% ${roll < chance ? '✅ SUCCESS!' : '❌ Failed'}`);
         console.log(`   Insight=${racer.stats.insight}, ProcRating=${procRating}, Mood=${moodPercent}%, Stamina=${(staminaRatio*100).toFixed(0)}%`);
+      } else if (roll < chance) {
+        console.log(`🎲 [SKILL CHECK] ${racer.name} - ${skill.name} (${phase}): ✅ SUCCESS! Chance=${(chance*100).toFixed(1)}%`);
       }
       
       if (roll < chance) {
