@@ -171,10 +171,11 @@
   const DEFAULT_ZONE_INDEX = Math.floor(ZONE_COUNT / 2);
   const ZONE_CHANGE_RATE = 2.6;
   const PASS_DISTANCE_THRESHOLD = 24;
-  const PASS_COOLDOWN_MIN = 2.0;
-  const PASS_COOLDOWN_MAX = 4.0;
-  const PASS_COST_SUCCESS = { min: 6, max: 10 };
-  const PASS_COST_FAIL = { min: 4, max: 8 };
+  const PASS_COOLDOWN_MIN = 4.0; // Increased from 2.0 - horses wait longer between attempts
+  const PASS_COOLDOWN_MAX = 6.0; // Increased from 4.0 - more realistic timing
+  const PASS_COST_SUCCESS = { min: 10, max: 16 }; // Increased from 6-10 - passing is expensive!
+  const PASS_COST_FAIL = { min: 18, max: 25 }; // Increased from 4-8 - failed pass is VERY costly
+  const BLOCK_DEFENSE_COST = 3; // Cost to defend a pass
   const BLOCK_STAMINA_TICK = 2;
   const BLOCK_DEFENSE_COST = 2.5;
   const FINAL_SPRINT_COST = 15;
@@ -2075,9 +2076,23 @@
         const ahead = group[i];
         const behind = group[i + 1];
         if (behind.passCooldown > 0) continue;
-        if (behind.energy <= PASS_COST_FAIL.min + 1) continue;
+        
+        // STRATEGIC PASSING CHECKS - Don't attempt unless it makes sense!
+        const staminaRatio = behind.energy / behind.maxEnergy;
+        if (staminaRatio < 0.40) continue; // Don't pass if low stamina (< 40%)
+        if (behind.energy <= PASS_COST_SUCCESS.max + 5) continue; // Need enough for pass + buffer
+        
         const gap = (ahead.distance - behind.distance + TRACK_LENGTH) % TRACK_LENGTH;
         if (gap <= 0 || gap > PASS_DISTANCE_THRESHOLD) continue;
+        
+        // Only pass if you're significantly faster (10%+ speed advantage)
+        const speedAdvantage = (behind.speed / ahead.speed) - 1.0;
+        if (speedAdvantage < 0.10) continue; // Need 10%+ speed advantage
+        
+        // Check rank - don't pass if already in good position
+        const rank = getRank(behind, race.leaderboard);
+        if (rank <= 2 && staminaRatio < 0.60) continue; // Top 2? Save energy unless you have lots
+        
         attemptPass(behind, ahead, race);
       }
     });
@@ -2105,47 +2120,43 @@
         racer.lastBlockDrain = now;
       }
       const rank = getRank(racer, leaderboard);
-      let desired = racer.targetZone ?? racer.zoneIndex ?? midIndex;
-        const aggression = racer.aggressionRating ?? racer.secondary?.aggression ?? 60;
-        const tactical = racer.secondary?.tacticalInstinct ?? racer.skillProcRating ?? 60;
-        const preferredLane = racer.preferredLane || racer.secondary?.positioning?.preferred || null;
+      
+      // STICKY LANES: Stay in starting lane 80% of the time unless there's a GOOD reason to change
+      let desired = racer.startingLane; // Default to starting lane!
+      const currentLane = racer.zoneIndex ?? midIndex;
+      
+      const aggression = racer.aggressionRating ?? racer.secondary?.aggression ?? 60;
+      const tactical = racer.secondary?.tacticalInstinct ?? racer.skillProcRating ?? 60;
+      const preferredLane = racer.preferredLane || racer.secondary?.positioning?.preferred || null;
 
+      // ONLY change lanes if blocked OR overtaking OR final sprint
       if (phase === "start") {
-        const accelScore = racer.stats.stride + racer.stats.force;
-          if (accelScore > 135 || (racer.startAggro || 0) > 0.55 || aggression > 72) {
-          desired = insideIndex;
-          } else if (accelScore < 105 && aggression < 55) {
-          desired = midIndex;
-        } else {
-          desired = sampleRng(race) > 0.5 ? insideIndex : midIndex;
-        }
-        scheduleStrategy(racer, race, 0.2, 0.5);
+        // Stay in starting lane during start phase
+        desired = racer.startingLane;
+        scheduleStrategy(racer, race, 2.0, 4.0); // Longer cooldown!
       } else if (phase === "middle") {
-        if (blocked) {
-            if (racer.stats.insight > 60 && racer.performance.maneuver > 55) {
-            desired = Math.min(outsideIndex, (racer.zoneIndex ?? midIndex) + 1);
-            } else if (racer.stats.resolve > 65 || tactical > 70) {
-            desired = racer.zoneIndex ?? midIndex;
+        if (blocked && energyPct > 40) {
+          // Only move if blocked AND have energy
+          if (racer.stats.insight > 60 && racer.performance.maneuver > 55) {
+            desired = Math.min(outsideIndex, currentLane + 1);
           } else {
-            desired = Math.max(midIndex, Math.min(outsideIndex, racer.zoneIndex ?? midIndex));
+            desired = currentLane; // Stay put if can't maneuver well
           }
         } else {
-            if ((racer.zoneIndex ?? midIndex) !== insideIndex && energyPct > 50 && aggression > 58) {
-            desired = insideIndex;
-          } else if (energyPct < 35) {
-            desired = midIndex;
-          }
+          // Not blocked? Stay in your lane!
+          desired = racer.startingLane;
         }
-        scheduleStrategy(racer, race, 0.8, 1.4);
+        scheduleStrategy(racer, race, 3.0, 5.0); // Much longer cooldown!
       } else {
-        desired = outsideIndex;
-          if (rank === 1 && !blocked && energyPct > 35) {
-          desired = insideIndex;
+        // Final phase - ONLY change if overtaking or clear benefit
+        if (rank === 1 && !blocked && energyPct > 40) {
+          desired = insideIndex; // Leader takes inside line
+        } else if (blocked && energyPct > 30) {
+          desired = outsideIndex; // Move outside to overtake
+        } else {
+          desired = racer.startingLane; // Otherwise stay in lane!
         }
-        if (energyPct < 25) {
-          desired = midIndex;
-        }
-        scheduleStrategy(racer, race, 0.4, 0.7);
+        scheduleStrategy(racer, race, 2.0, 4.0);
       }
 
       const phaseFocus = racer.aptitudes?.phase?.focus;
@@ -2644,8 +2655,8 @@
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // AGGRESSIVE DRAIN: Stamina is a strategic resource (finish with 0-20% energy)
-  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 5.0) * adjustedStaminaMod;
+    // REDUCED DRAIN: Horses should finish with 15-35% energy for close races
+  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 3.5) * adjustedStaminaMod;
 
     const racerObj = {
       id,
