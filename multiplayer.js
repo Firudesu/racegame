@@ -950,9 +950,9 @@
         // Move forward
         racer.distance += speed * TRACK_STEP;
         
-        // Drain stamina (VERY AGGRESSIVE - force all horses to push hard!)
+        // Drain stamina (NUCLEAR - force 20-30% finish stamina!)
         const intensity = speed / baseSpeed;
-        let baseDrain = 8.5 * TRACK_STEP * intensity; // Increased from 7.0 - no coasting!
+        let baseDrain = 11.0 * TRACK_STEP * intensity; // Increased from 8.5 - everyone exhausted!
         
         // Apply paceControl from secondary stats (MAJOR impact!)
         const paceControl = racer.profile?.secondary?.paceControl || 60;
