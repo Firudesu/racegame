@@ -713,6 +713,11 @@
     const trackConditions = generateMultiplayerTrackConditions();
     console.log('[Multiplayer] Track Conditions:', trackConditions);
     
+    // Set global track conditions so buildRacer can use them
+    if (typeof window.state !== 'undefined') {
+      window.state.currentTrackConditions = trackConditions;
+    }
+    
     // Build racers using FULL race engine
     const racers = [];
     
@@ -789,22 +794,9 @@
       racer.strategyCooldown = (0.3 + rng() * 0.5) * decisionFactor;
       RaceSim.applyRacePerformanceAdjustments(racer, rng);
       
-      // Apply track conditions with adaptability
-      const trackAdaptability = racer.secondary?.trackAdaptability || 60;
-      const adaptabilityFactor = trackAdaptability / 100;
-      
-      const speedPenalty = (1 - trackConditions.speedModifier);
-      const staminaPenalty = (trackConditions.staminaModifier - 1);
-      
-      const adjustedSpeedMod = 1 - (speedPenalty * (1 - adaptabilityFactor * 0.6));
-      const adjustedStaminaMod = 1 + (staminaPenalty * (1 - adaptabilityFactor * 0.5));
-      
-      // Adjust racer's speed and stamina based on conditions
-      racer.baseSpeed *= adjustedSpeedMod;
-      racer.maxSpeed *= adjustedSpeedMod;
-      racer.baseDrain *= adjustedStaminaMod;
-      
-      console.log(`[Track] ${racer.name} - Adaptability: ${trackAdaptability}, Speed: ${(adjustedSpeedMod * 100).toFixed(1)}%, Drain: ${(adjustedStaminaMod * 100).toFixed(1)}%`);
+      // Track conditions are already applied in buildRacer() via state.currentTrackConditions
+      // No need to reapply here!
+      console.log(`[Multiplayer] ${racer.name} ready - Base Speed: ${racer.baseSpeed.toFixed(3)}, Drain: ${racer.baseDrain.toFixed(3)}/s`);
     });
     
     // Lanes are already assigned randomly in buildRacer()
