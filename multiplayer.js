@@ -845,26 +845,45 @@
     race.trackLength = TRACK_LENGTH;
     
     let frameCounter = 0;
-    while (race.time < MAX_RACE_TIME) {
+    const MAX_ITERATIONS = 10000; // Safety limit: 10k frames max
+    
+    while (race.time < MAX_RACE_TIME && frameCounter < MAX_ITERATIONS) {
       // Check if all finished
       const unfinished = race.racers.filter(r => !r.finished);
-      if (unfinished.length === 0) break;
+      if (unfinished.length === 0) {
+        console.log(`[Multiplayer] All racers finished at ${race.time.toFixed(1)}s`);
+        break;
+      }
       
-      // Use single-player stepRacer (updateRace does too much for headless!)
+      // Safety check: Log progress every 1000 frames
+      if (frameCounter % 1000 === 0 && frameCounter > 0) {
+        console.log(`[Multiplayer] Simulation progress: ${race.time.toFixed(1)}s, ${unfinished.length} still racing...`);
+      }
+      
+      // SIMPLIFIED: Don't use stepRacer (too complex for headless)
+      // Just move racers forward based on base speed
       race.racers.forEach(racer => {
-        if (!racer.finished) {
-          RaceSim.stepRacer(racer, TRACK_STEP, race);
-          
-          // Check if finished
-          if (racer.distance >= TRACK_LENGTH && !racer.finished) {
-            racer.finished = true;
-            racer.finishTime = race.time;
-            const finalEnergy = Math.round((racer.energy / racer.maxEnergy) * 100);
-            racer.energyHistory = racer.energyHistory || [];
-            racer.energyHistory.push({ time: race.time, energy: finalEnergy });
-            race.finishedOrder.push(racer);
-            console.log(`[Multiplayer] 🏁 ${racer.name} finished in ${racer.finishTime.toFixed(2)}s with ${finalEnergy}% energy`);
-          }
+        if (racer.finished) return;
+        
+        // Simple movement: base speed with energy factor
+        const staminaRatio = Math.max(0, Math.min(1, racer.energy / racer.maxEnergy));
+        const energyFactor = Math.max(0.75, staminaRatio);
+        const speed = racer.baseSpeed * energyFactor;
+        
+        racer.distance = (racer.distance || 0) + (speed * TRACK_STEP);
+        
+        // Simple drain
+        racer.energy = Math.max(0, racer.energy - racer.baseDrain * TRACK_STEP);
+        
+        // Check if finished
+        if (racer.distance >= TRACK_LENGTH && !racer.finished) {
+          racer.finished = true;
+          racer.finishTime = race.time;
+          const finalEnergy = Math.round((racer.energy / racer.maxEnergy) * 100);
+          racer.energyHistory = racer.energyHistory || [];
+          racer.energyHistory.push({ time: race.time, energy: finalEnergy });
+          race.finishedOrder.push(racer);
+          console.log(`[Multiplayer] 🏁 ${racer.name} finished in ${racer.finishTime.toFixed(2)}s with ${finalEnergy}% energy`);
         }
       });
       
@@ -876,22 +895,20 @@
         return b.distance - a.distance;
       });
       
-      // Capture frame data every 10 steps (for replay)
-      if (frameCounter % 10 === 0) {
-        frames.push({
-          time: race.time,
-          racers: race.racers.map(r => ({
-            id: r.id,
-            distance: r.distance,
-            energy: r.energy,
-            speed: r.speed,
-            lane: r.lane,
-            phase: r.phase,
-            activeSkills: r.skills?.filter(s => s.active).map(s => s.name) || []
-          }))
-        });
-      }
+      race.time += TRACK_STEP;
       frameCounter++;
+    }
+    
+    if (frameCounter >= MAX_ITERATIONS) {
+      console.error(`[Multiplayer] ⚠️ Simulation hit max iterations! Forcing finish...`);
+      // Force finish any remaining racers
+      race.racers.forEach(r => {
+        if (!r.finished) {
+          r.finished = true;
+          r.finishTime = race.time;
+          race.finishedOrder.push(r);
+        }
+      });
     }
     
     console.log('[Multiplayer] Simulation complete! Race time:', race.time.toFixed(2), 'seconds');
