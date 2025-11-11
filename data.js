@@ -325,17 +325,17 @@
   function createAIRacer(index, playerStats, rng) {
     const stats = {};
     const variance = [
-      { key: "stride", spread: 8, minBoost: 70 },      // Match player (70-85)
-      { key: "endurance", spread: 8, minBoost: 70 },   // Match player (70-85)
-      { key: "force", spread: 8, minBoost: 55 },       // Decent force
-      { key: "resolve", spread: 8, minBoost: 55 },     // Decent resolve
-      { key: "insight", spread: 8, minBoost: 60 }      // Good insight
+      { key: "stride", spread: 10 },      // Player ±5
+      { key: "endurance", spread: 10 },   // Player ±5
+      { key: "force", spread: 10 },       // Player ±5
+      { key: "resolve", spread: 10 },     // Player ±5
+      { key: "insight", spread: 10 }      // Player ±5
     ];
 
-    variance.forEach(({ key, spread, minBoost }) => {
-      const base = Math.max(playerStats[key], minBoost); // Match or exceed player!
-      const delta = (rng() - 0.5) * spread * 2;
-      stats[key] = clamp(Math.round(base + delta), minBoost, 95);
+    variance.forEach(({ key, spread }) => {
+      const playerStat = playerStats[key] || 60;
+      const delta = (rng() - 0.5) * spread * 2; // ±5 from player
+      stats[key] = clamp(Math.round(playerStat + delta), 35, 95);
     });
 
     const styleKey = STYLE_KEYS[Math.floor(rng() * STYLE_KEYS.length)];

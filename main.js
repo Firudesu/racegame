@@ -3104,16 +3104,13 @@
       }
     }
     
-    // PACER: Sprint at key tactical moments (prefer straights!)
+    // PACER: Consistent tactical sprints
     if (style === 'Pacer') {
-      if (canOvertake && staminaRatio > 0.5 && isCleanTrack && inStraight && phase === 'middle') {
-        return { sprint: true, reason: "Tactical overtake on straight!" };
+      if (phase === 'middle' && staminaRatio > 0.5 && inStraight && (canOvertake || isFallingBehind)) {
+        return { sprint: true, reason: "Tactical positioning!" };
       }
-      if (isFallingBehind && staminaRatio > 0.55 && phase === 'middle') {
-        return { sprint: true, reason: "Closing gap to maintain pace!" };
-      }
-      if (phase === 'final' && rank > 2 && staminaRatio > 0.45 && canOvertake && inStraight) {
-        return { sprint: true, reason: "Final straight positioning!" };
+      if (phase === 'final' && staminaRatio > 0.4 && (rank > 2 || isFallingBehind)) {
+        return { sprint: true, reason: "Final push!" };
       }
     }
     
@@ -3133,16 +3130,16 @@
       }
     }
     
-    // SPRINTER: Save for final phase, tactical mid-race
+    // SPRINTER: Burst throughout race
     if (style === 'Sprinter') {
-      if (phase === 'start' && aggression > 75 && staminaRatio > 0.8 && inStraight && rank > 2) {
-        return { sprint: true, reason: "Early catch-up burst!" };
+      if (phase === 'start' && staminaRatio > 0.7 && inStraight) {
+        return { sprint: true, reason: "Early burst!" };
       }
-      if (phase === 'middle' && canOvertake && staminaRatio > 0.6 && inStraight && rank > 2) {
-        return { sprint: true, reason: "Mid-race overtake on straight!" };
+      if (phase === 'middle' && staminaRatio > 0.5 && inStraight) {
+        return { sprint: true, reason: "Mid-race burst!" };
       }
-      if (phase === 'final' && staminaRatio > 0.35 && inStraight) {
-        return { sprint: true, reason: "Sprinter final burst!" };
+      if (phase === 'final' && staminaRatio > 0.3) {
+        return { sprint: true, reason: "Final sprint!" };
       }
     }
     
