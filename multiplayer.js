@@ -194,8 +194,16 @@
         return;
       }
 
-      // Save horse to database if not already there
+      // Ask player to choose strategy
+      const strategyChoice = prompt('Choose your racing strategy:\n\n1 = Leader (conserve stamina when ahead)\n2 = Pacer (steady pace, balanced)\n3 = Chaser (save stamina for final burst)\n4 = Sprinter (speed bursts throughout)\n\nEnter 1, 2, 3, or 4:', '2');
+      
+      const strategies = { '1': 'Leader', '2': 'Pacer', '3': 'Chaser', '4': 'Sprinter' };
+      const selectedStrategy = strategies[strategyChoice] || 'Pacer';
+      
+      console.log('[Multiplayer] Player selected strategy:', selectedStrategy);
+      
       const horse = await saveHorseToDatabase(selectedHorse, player.id, walletAddress);
+      horse.selectedStrategy = selectedStrategy;
 
       // Join the queue
       await joinRaceQueue(player.id, walletAddress, horse);
