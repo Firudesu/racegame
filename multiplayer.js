@@ -1448,6 +1448,7 @@
     let currentFrame = 0;
     let commentaryTimer = 0;
     let lastCommentary = '';
+    let lastLeaderId = null; // Track leader changes
     const PLAYBACK_SPEED = 1; // 1x speed (real-time)
     const TRACK_STEP = 1 / 20; // 0.05s
     
@@ -1474,7 +1475,7 @@
           leaderboard: frame.leaderboard || frame.racers,
           running: true,
           trackLength: 1200,
-          lastLeaderId: race?.lastLeaderId // Preserve for lead change detection
+          lastLeaderId: lastLeaderId // Use outer scope variable
         };
         
         // Use ACTUAL drawRace function from single-player!
@@ -1495,6 +1496,11 @@
             showMultiplayerCommentary(commentary);
             lastCommentary = commentary;
           }
+        }
+        
+        // Update lastLeaderId for next frame
+        if (race.leaderboard && race.leaderboard[0]) {
+          lastLeaderId = race.leaderboard[0].id;
         }
         
         currentFrame += PLAYBACK_SPEED;
