@@ -266,10 +266,12 @@
       image_url: horse.image_url || horse.image || horse.portrait || horse.avatar?.portrait,
       stats: stats,
       skills: horse.avatar?.skills || horse.skills || [],
-      style: horse.avatar?.style || horse.style || 'Pacer',
+      style: horse.selectedStrategy || horse.avatar?.style || horse.style || 'Pacer', // Use selected strategy!
       aptitudes: horse.avatar?.aptitudes || horse.aptitudes || {},
       nft_token_id: horse.nft_token_id || horse.tokenId
     };
+    
+    console.log('[Multiplayer] Queue data includes strategy:', horseData.style);
     
     console.log('[Multiplayer] Formatted horse_data with stats:', JSON.stringify(horseData.stats));
 
