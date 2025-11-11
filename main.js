@@ -2520,9 +2520,15 @@
     const seed = Date.now();
     const seedRng = createSeededRng(seed);
     updateAvatarProfile();
+    
+    // 🔍 DEBUG: Log player stats being used for AI generation
+    console.log('\n🎯 [RACE CONFIG] Creating race with player stats:', state.avatar.stats);
+    
     const aiBlueprints = Array.from({ length: 3 }, (_, index) =>
       createAIRacer(index, state.avatar.stats, seedRng)
     ).map((blueprint) => deepClone(blueprint));
+    
+    console.log('🤖 [AI GENERATION] Generated AI stats:', aiBlueprints.map(ai => ({ name: ai.name, stride: ai.stats.stride, end: ai.stats.endurance })));
 
       const playerProfile =
         state.avatar.profile || buildRacingProfile(state.avatar.stats, state.avatar.modifiers || {});
@@ -2700,7 +2706,7 @@
   const strideDrainFactor = stats.stride / 150; // 0.53 for stride 79
   const enduranceEfficiency = stats.endurance / 180; // 0.37 for endurance 66
   const drainBalance = 0.40 + strideDrainFactor - enduranceEfficiency;
-  const staminaDrain = Math.max(0.08, drainBalance * 6.0) * adjustedStaminaMod;
+  const staminaDrain = Math.max(0.08, drainBalance * 5.0) * adjustedStaminaMod; // Reduced 6.0 → 5.0
 
     const racerObj = {
       id,
