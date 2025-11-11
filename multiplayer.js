@@ -461,32 +461,40 @@
       // Wait a moment for Player 1 to finish creating the race
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Find MY race that I just participated in (not viewed yet!)
+      // Find MY NEWEST race (created in last 30 seconds)
+      const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
+      
       const { data: participants, error } = await supabase
         .from('race_participants')
-        .select('race_id, viewed, races(*)')
+        .select('race_id, viewed, created_at, races(*)')
         .eq('player_id', multiplayerState.currentPlayer.id)
         .eq('viewed', false)
+        .gte('created_at', thirtySecondsAgo) // Only races from last 30s!
         .order('created_at', { ascending: false })
         .limit(1);
 
       if (error) throw error;
 
       if (participants && participants.length > 0) {
-        const raceData = participants[0].races;
-        console.log('[Multiplayer] Found MY unviewed race:', raceData.id);
+        const participant = participants[0];
+        const raceData = participant.races;
+        const raceId = raceData.id;
+        
+        console.log('[Multiplayer] Found MY unviewed race:', raceId);
+        console.log('[Multiplayer] Race created:', participant.created_at);
+        console.log('[Multiplayer] Race has frames:', raceData.race_replay?.frames?.length || 0);
         
         // Mark as viewed
         await supabase
           .from('race_participants')
           .update({ viewed: true })
           .eq('player_id', multiplayerState.currentPlayer.id)
-          .eq('race_id', raceData.id);
+          .eq('race_id', raceId);
         
         // Show the race results
-        await showRaceReplay(raceData.id, raceData);
+        await showRaceReplay(raceId, raceData);
       } else {
-        console.log('[Multiplayer] No unviewed race found yet, waiting...');
+        console.log('[Multiplayer] No recent unviewed race found, waiting...');
         // Retry after 2 seconds
         setTimeout(() => handleRaceStarted(), 2000);
       }
