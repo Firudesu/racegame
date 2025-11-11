@@ -619,7 +619,9 @@
       // Extract player IDs
       const playerIds = queueEntries.map(e => e.player_id);
       
-      // Create race record with all data (including AI results!)
+      // Create race record with all data (including AI results AND FRAMES!)
+      console.log(`[Multiplayer] 💾 Saving race with ${raceResults.replayData?.frames?.length || 0} frames to database...`);
+      
       const { data: race, error: raceError } = await supabase
         .from('races')
         .insert({
@@ -634,7 +636,7 @@
               horse_name: e.horse_data.name
             }))
           },
-          race_replay: raceResults.replayData,
+          race_replay: raceResults.replayData,  // THIS MUST SAVE FRAMES!
           winner_id: raceResults.winnerId,
           results: raceResults.allResults, // Save ALL results including AI!
           started_at: new Date().toISOString(),
@@ -642,6 +644,13 @@
         })
         .select()
         .single();
+      
+      if (raceError) {
+        console.error('[Multiplayer] ❌ Error saving race:', raceError);
+        console.error('[Multiplayer] ❌ Error details:', JSON.stringify(raceError));
+      } else {
+        console.log(`[Multiplayer] ✅ Race saved! Verifying frames in DB: ${race.race_replay?.frames?.length || 0} frames`);
+      }
 
       if (raceError) {
         console.error('[Multiplayer] Error creating race:', raceError);
@@ -1277,12 +1286,14 @@
     console.log('[Multiplayer] Showing VISUAL race replay:', raceId);
     console.log('[Multiplayer] Race data:', raceData);
     
-    // Get results and replay frames
-    const results = raceData.allResults || raceData.results || raceData.replayData?.results || [];
-    const replayFrames = raceData.replayData?.frames || [];
+    // Get results and replay frames from different possible locations
+    const results = raceData.allResults || raceData.results || raceData.replayData?.results || raceData.race_replay?.results || [];
+    const replayFrames = raceData.race_replay?.frames || raceData.replayData?.frames || [];
     
     console.log('[Multiplayer] Results:', results.length, 'racers');
     console.log('[Multiplayer] Replay frames:', replayFrames.length);
+    console.log('[Multiplayer] Race replay data structure:', raceData.race_replay ? 'race_replay exists' : 'NO race_replay!');
+    console.log('[Multiplayer] ReplayData structure:', raceData.replayData ? 'replayData exists' : 'NO replayData!');
     
     // Switch to race screen to show visual replay
     const RaceUI = window.RaceSimulation;
