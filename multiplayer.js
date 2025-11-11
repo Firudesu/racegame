@@ -910,11 +910,12 @@
           racers: race.racers.map(r => ({
             id: r.id,
             name: r.name,
-            distance: r.distance,
-            energy: r.energy,
-            speed: r.speed || racer.baseSpeed,
-            finished: r.finished,
-            finishTime: r.finishTime
+            distance: r.distance || 0,
+            energy: r.energy || 0,
+            speed: r.speed || r.baseSpeed || 5,
+            finished: r.finished || false,
+            finishTime: r.finishTime || null,
+            color: r.color || '#fff'
           }))
         });
       }
