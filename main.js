@@ -4374,13 +4374,16 @@
     stepRacer,
     applyRacePerformanceAdjustments,
     assignInitialLanes,
+    handlePassing,
+    decideZoneTargets,
     TRACK_LENGTH,
     TRACK_STEP,
     START_PHASE_LIMIT,
     FINAL_PHASE_START
   };
   
-  // Export showScreen for multiplayer
+  // Export showScreen and drawRace for multiplayer
   window.showScreen = showScreen;
+  window.drawRace = drawRace;
 
   })();

@@ -868,32 +868,28 @@
         console.log(`[Multiplayer] Simulation progress: ${race.time.toFixed(1)}s, ${unfinished.length} still racing...`);
       }
       
-      // SIMPLIFIED: Don't use stepRacer (too complex for headless)
-      // Just move racers forward based on base speed
+      // USE FULL SINGLE-PLAYER MECHANICS!
+      RaceSim.decideZoneTargets(race, TRACK_STEP);
+      
       race.racers.forEach(racer => {
-        if (racer.finished) return;
-        
-        // Simple movement: base speed with energy factor
-        const staminaRatio = Math.max(0, Math.min(1, racer.energy / racer.maxEnergy));
-        const energyFactor = Math.max(0.75, staminaRatio);
-        const speed = racer.baseSpeed * energyFactor;
-        
-        racer.distance = (racer.distance || 0) + (speed * TRACK_STEP);
-        
-        // Simple drain
-        racer.energy = Math.max(0, racer.energy - racer.baseDrain * TRACK_STEP);
-        
-        // Check if finished
-        if (racer.distance >= TRACK_LENGTH && !racer.finished) {
-          racer.finished = true;
-          racer.finishTime = race.time;
-          const finalEnergy = Math.round((racer.energy / racer.maxEnergy) * 100);
-          racer.energyHistory = racer.energyHistory || [];
-          racer.energyHistory.push({ time: race.time, energy: finalEnergy });
-          race.finishedOrder.push(racer);
-          console.log(`[Multiplayer] 🏁 ${racer.name} finished in ${racer.finishTime.toFixed(2)}s with ${finalEnergy}% energy`);
+        if (!racer.finished) {
+          RaceSim.stepRacer(racer, TRACK_STEP, race);
+          
+          // Check if finished
+          if (racer.distance >= TRACK_LENGTH && !racer.finished) {
+            racer.finished = true;
+            racer.finishTime = race.time;
+            const finalEnergy = Math.round((racer.energy / racer.maxEnergy) * 100);
+            racer.energyHistory = racer.energyHistory || [];
+            racer.energyHistory.push({ time: race.time, energy: finalEnergy });
+            race.finishedOrder.push(racer);
+            console.log(`[Multiplayer] 🏁 ${racer.name} finished in ${racer.finishTime.toFixed(2)}s with ${finalEnergy}% energy`);
+          }
         }
       });
+      
+      // Handle passing (overtaking mechanics)
+      RaceSim.handlePassing(race, TRACK_STEP);
       
       // Update leaderboard
       race.leaderboard = [...race.racers].sort((a, b) => {
@@ -903,19 +899,39 @@
         return b.distance - a.distance;
       });
       
-      // Capture frame data every 10 steps (for replay)
-      if (frameCounter % 10 === 0) {
+      // Capture COMPLETE race state every frame (for perfect replay!)
+      if (frameCounter % 2 === 0) { // Every 2 steps = 10fps replay
         frames.push({
           time: race.time,
+          leaderboard: race.leaderboard.map(r => ({ id: r.id, distance: r.distance })),
           racers: race.racers.map(r => ({
+            // Core identity
             id: r.id,
             name: r.name,
+            color: r.color,
+            isPlayer: r.isPlayer,
+            isRealPlayer: r.isRealPlayer,
+            
+            // Position and movement
             distance: r.distance || 0,
-            energy: r.energy || 0,
-            speed: r.speed || r.baseSpeed || 5,
+            speed: r.speed || 0,
             finished: r.finished || false,
             finishTime: r.finishTime || null,
-            color: r.color || '#fff'
+            
+            // Stamina and phase
+            energy: r.energy || 0,
+            maxEnergy: r.maxEnergy || 650,
+            phase: r.phase || 'start',
+            
+            // Lane and zone
+            lane: r.lane || 0,
+            zoneIndex: r.zoneIndex || 0,
+            zoneOffset: r.zoneOffset || 0,
+            
+            // Style and skills
+            style: r.style || 'Pacer',
+            sprintMode: r.sprintMode || false,
+            skills: (r.skills || []).filter(s => s.active).map(s => ({ name: s.name, timer: s.timer }))
           }))
         });
       }
@@ -1384,7 +1400,7 @@
   }
   
   async function playVisualReplay(frames, results) {
-    console.log('[Multiplayer] Playing visual replay with', frames.length, 'frames...');
+    console.log('[Multiplayer] Playing FULL visual replay with', frames.length, 'frames...');
     
     if (frames.length === 0) {
       console.log('[Multiplayer] No frames to replay, showing results immediately');
@@ -1392,43 +1408,31 @@
       return;
     }
     
-    // Get canvas
-    const canvas = document.getElementById('race-canvas');
-    if (!canvas) {
-      console.error('[Multiplayer] No canvas found!');
+    // Get drawRace function from single-player
+    const drawRace = window.drawRace;
+    if (!drawRace) {
+      console.error('[Multiplayer] drawRace not available!');
       showResultsOnly(results);
       return;
     }
-    
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
     
     // Hide start race button, show replay message
     const startBtn = document.getElementById('start-race');
     if (startBtn) startBtn.disabled = true;
     
-    // Add replay message
-    const raceHud = document.querySelector('.race-hud');
-    if (raceHud) {
-      const replayMsg = document.createElement('div');
-      replayMsg.id = 'replay-message';
-      replayMsg.style.cssText = 'position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,215,0,0.9); padding: 12px 24px; border-radius: 8px; font-weight: bold; z-index: 100;';
-      replayMsg.textContent = '🎬 MULTIPLAYER RACE REPLAY';
-      raceHud.appendChild(replayMsg);
-    }
+    // Show countdown first (3, 2, 1, GO!)
+    await showCountdown();
     
-    // Animate through frames
+    // Animate through frames using REAL drawRace function!
     let currentFrame = 0;
-    const PLAYBACK_SPEED = 2; // 2x speed
+    const PLAYBACK_SPEED = 1; // 1x speed (real-time)
     
     return new Promise(resolve => {
-      function drawFrame() {
+      function animate() {
         if (currentFrame >= frames.length) {
           // Animation complete
           console.log('[Multiplayer] Replay animation complete!');
-          const replayMsg = document.getElementById('replay-message');
-          if (replayMsg) replayMsg.remove();
+          if (startBtn) startBtn.disabled = false;
           showResultsOnly(results);
           resolve();
           return;
@@ -1436,67 +1440,82 @@
         
         const frame = frames[currentFrame];
         
-        // Clear canvas
+        // Reconstruct race object from frame data
+        const race = {
+          time: frame.time,
+          racers: frame.racers,
+          leaderboard: frame.leaderboard || frame.racers,
+          running: true,
+          trackLength: 1200
+        };
+        
+        // Use ACTUAL drawRace function from single-player!
+        drawRace(race);
+        
+        // Update HUD for first player
+        const player = frame.racers.find(r => r.isRealPlayer);
+        if (player) {
+          updateMultiplayerHUD(player, race);
+        }
+        
+        currentFrame += PLAYBACK_SPEED;
+        requestAnimationFrame(animate);
+      }
+      
+      animate();
+    });
+  }
+  
+  function updateMultiplayerHUD(player, race) {
+    const hudPhase = document.getElementById('hud-phase');
+    const hudTimer = document.getElementById('hud-timer');
+    const hudRank = document.getElementById('hud-rank');
+    const hudEnergy = document.getElementById('hud-energy');
+    
+    if (hudPhase) hudPhase.textContent = `${player.phase || 'START'} · ${player.style || 'Pacer'}`;
+    if (hudTimer) hudTimer.textContent = race.time.toFixed(1);
+    
+    const rank = (race.leaderboard || race.racers).findIndex(r => r.id === player.id) + 1;
+    if (hudRank) hudRank.textContent = rank ? `#${rank}` : '--';
+    
+    const energyPct = Math.max(0, Math.min(100, Math.round((player.energy / player.maxEnergy) * 100)));
+    if (hudEnergy) hudEnergy.style.width = `${energyPct}%`;
+  }
+  
+  async function showCountdown() {
+    return new Promise(resolve => {
+      const canvas = document.getElementById('race-canvas');
+      if (!canvas) {
+        resolve();
+        return;
+      }
+      
+      const ctx = canvas.getContext('2d');
+      const width = canvas.width;
+      const height = canvas.height;
+      
+      let count = 3;
+      
+      function drawCount() {
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, width, height);
         
-        // Draw track (simple oval)
-        const cx = width / 2;
-        const cy = height / 2;
-        const radiusX = width * 0.37;
-        const radiusY = height * 0.32;
-        
-        ctx.strokeStyle = '#444';
-        ctx.lineWidth = 80;
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, radiusX, radiusY, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        
-        // Draw track lines
-        ctx.strokeStyle = '#666';
-        ctx.lineWidth = 2;
-        for (let i = 0; i < 3; i++) {
-          const offset = -24 + i * 24;
-          ctx.beginPath();
-          ctx.ellipse(cx, cy, radiusX + offset, radiusY + offset, 0, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        
-        // Draw racers
-        const TRACK_LENGTH = 1200;
-        frame.racers.forEach(racer => {
-          if (racer.finished) return; // Don't draw finished racers
-          
-          const progress = (racer.distance % TRACK_LENGTH) / TRACK_LENGTH;
-          const theta = -Math.PI / 2 + progress * Math.PI * 2;
-          
-          const x = cx + radiusX * Math.cos(theta);
-          const y = cy + radiusY * Math.sin(theta);
-          
-          // Draw horse as circle
-          ctx.fillStyle = racer.color || '#64b5f6';
-          ctx.beginPath();
-          ctx.arc(x, y, 12, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Draw name
-          ctx.fillStyle = '#fff';
-          ctx.font = '12px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(racer.name, x, y - 20);
-        });
-        
-        // Draw time
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 24px Arial';
+        ctx.fillStyle = count === 0 ? '#4ade80' : '#fbbf24';
+        ctx.font = 'bold 120px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(`Time: ${frame.time.toFixed(1)}s`, cx, 40);
+        ctx.textBaseline = 'middle';
+        ctx.fillText(count === 0 ? 'GO!' : count.toString(), width / 2, height / 2);
         
-        currentFrame += PLAYBACK_SPEED;
-        requestAnimationFrame(drawFrame);
+        count--;
+        
+        if (count < 0) {
+          resolve();
+        } else {
+          setTimeout(drawCount, 800);
+        }
       }
       
-      drawFrame();
+      drawCount();
     });
   }
 
