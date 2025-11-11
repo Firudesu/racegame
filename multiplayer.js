@@ -1446,7 +1446,10 @@
     
     // Animate through frames using REAL drawRace function!
     let currentFrame = 0;
+    let commentaryTimer = 0;
+    let lastCommentary = '';
     const PLAYBACK_SPEED = 1; // 1x speed (real-time)
+    const TRACK_STEP = 1 / 20; // 0.05s
     
     return new Promise(resolve => {
       function animate() {
@@ -1454,6 +1457,9 @@
           // Animation complete
           console.log('[Multiplayer] Replay animation complete!');
           if (startBtn) startBtn.disabled = false;
+          // Hide commentary
+          const commentaryBox = document.getElementById('race-commentary');
+          if (commentaryBox) commentaryBox.style.display = 'none';
           showResultsOnly(results);
           resolve();
           return;
@@ -1467,7 +1473,8 @@
           racers: frame.racers,
           leaderboard: frame.leaderboard || frame.racers,
           running: true,
-          trackLength: 1200
+          trackLength: 1200,
+          lastLeaderId: race?.lastLeaderId // Preserve for lead change detection
         };
         
         // Use ACTUAL drawRace function from single-player!
@@ -1479,12 +1486,85 @@
           updateMultiplayerHUD(player, race);
         }
         
+        // Generate commentary every 3 seconds
+        commentaryTimer += TRACK_STEP * PLAYBACK_SPEED;
+        if (commentaryTimer >= 3) {
+          commentaryTimer = 0;
+          const commentary = generateMultiplayerCommentary(race);
+          if (commentary && commentary !== lastCommentary) {
+            showMultiplayerCommentary(commentary);
+            lastCommentary = commentary;
+          }
+        }
+        
         currentFrame += PLAYBACK_SPEED;
         requestAnimationFrame(animate);
       }
       
       animate();
     });
+  }
+  
+  function generateMultiplayerCommentary(race) {
+    const racers = race.racers.filter(r => !r.finished);
+    if (racers.length === 0) return null;
+    
+    const leader = race.leaderboard[0];
+    const second = race.leaderboard[1];
+    
+    if (!leader || !second) return null;
+    
+    const gap = leader.distance - second.distance;
+    const progress = leader.distance / (race.trackLength || 1200);
+    
+    const messages = [];
+    
+    // Sprint commentary
+    const sprinting = racers.filter(r => r.sprintMode);
+    if (sprinting.length > 0) {
+      messages.push(`${sprinting[0].name} is going all out!`);
+    }
+    
+    // Close race
+    if (gap < 15 && progress > 0.5) {
+      messages.push(`It's neck and neck! This is a close race!`);
+    }
+    
+    // Leader dominating
+    if (gap > 40) {
+      messages.push(`${leader.name} has pulled away!`);
+    }
+    
+    // Home straight
+    if (progress > 0.8 && progress < 0.95) {
+      messages.push(`Into the home straight - anything can happen!`);
+    }
+    
+    // Lead changes
+    if (race.lastLeaderId && race.lastLeaderId !== leader.id) {
+      messages.push(`${leader.name} takes the lead!`);
+      race.lastLeaderId = leader.id;
+    }
+    
+    if (!race.lastLeaderId) race.lastLeaderId = leader.id;
+    
+    return messages.length > 0 ? messages[Math.floor(Math.random() * messages.length)] : null;
+  }
+  
+  function showMultiplayerCommentary(text) {
+    const commentaryEl = document.getElementById('commentary-text');
+    const commentaryBox = document.getElementById('race-commentary');
+    
+    if (!commentaryEl || !commentaryBox) return;
+    
+    commentaryBox.style.display = 'block';
+    commentaryEl.textContent = text;
+    
+    // Trigger animation
+    commentaryBox.style.animation = 'none';
+    setTimeout(() => {
+      commentaryBox.style.animation = 'commentaryPulse 0.3s ease-out';
+    }, 10);
   }
   
   function updateMultiplayerHUD(player, race) {
