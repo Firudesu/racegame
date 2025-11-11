@@ -1163,10 +1163,48 @@
   }
 
   async function showRaceReplay(raceId, raceData) {
-    console.log('[Multiplayer] Showing race replay:', raceId);
+    console.log('[Multiplayer] Showing VISUAL race replay:', raceId);
     console.log('[Multiplayer] Race data:', raceData);
     
-    // Create a modal overlay for the replay
+    // Get results and replay frames
+    const results = raceData.allResults || raceData.results || raceData.replayData?.results || [];
+    const replayFrames = raceData.replayData?.frames || [];
+    
+    console.log('[Multiplayer] Results:', results.length, 'racers');
+    console.log('[Multiplayer] Replay frames:', replayFrames.length);
+    
+    // Switch to race screen to show visual replay
+    const RaceUI = window.RaceSimulation;
+    if (!RaceUI) {
+      console.error('[Multiplayer] Race engine not available for visual replay');
+      showResultsOnly(results);
+      return;
+    }
+    
+    // Navigate to race screen
+    const raceScreen = document.getElementById('race-screen');
+    if (raceScreen) {
+      // Hide all screens
+      ['menu-screen', 'training-screen', 'paddock-screen', 'retired-screen'].forEach(id => {
+        const screen = document.getElementById(id);
+        if (screen) screen.style.display = 'none';
+      });
+      raceScreen.style.display = 'flex';
+    }
+    
+    // If we have replay frames, play visual animation
+    if (replayFrames.length > 0) {
+      await playVisualReplay(replayFrames, results);
+    } else {
+      // No frames, just show results
+      showResultsOnly(results);
+    }
+  }
+  
+  function showResultsOnly(results) {
+    console.log('[Multiplayer] Showing results modal (no visual replay)');
+    
+    // Create a modal overlay for results
     let replayModal = document.getElementById('race-replay-modal');
     
     if (!replayModal) {
@@ -1188,14 +1226,10 @@
       `;
       document.body.appendChild(replayModal);
     }
-
-    // Use allResults if available (includes AI), otherwise fall back to results
-    // Results should now include AI when fetched from database!
-    const results = raceData.allResults || raceData.results || raceData.replayData?.results || [];
     
     console.log('[Multiplayer] Displaying', results.length, 'race results');
     
-    replayModal.innerHTML = `
+    const modalHTML = `
       <div style="max-width: 800px; width: 100%; background: linear-gradient(135deg, rgba(20, 20, 40, 0.95), rgba(40, 40, 80, 0.95)); border-radius: 24px; padding: 40px; border: 3px solid var(--accent);">
         <h2 style="margin: 0 0 30px 0; text-align: center; color: var(--accent); font-size: 2em;">
           🏁 Race Results
@@ -1213,7 +1247,7 @@
                     ${r.horseName || `Horse ${i + 1}`}${r.isAI ? ' <span style="font-size: 0.8em; opacity: 0.7;">(AI)</span>' : ''}
                   </div>
                   <div style="font-size: 0.9em; opacity: 0.7;">
-                    Time: ${r.time ? r.time.toFixed(2) + 's' : 'N/A'}
+                    Time: ${r.time ? r.time.toFixed(2) + 's' : 'N/A'} | Stamina: ${r.finalEnergy || r.stats?.stamina || '?'}%
                   </div>
                 </div>
               </div>
@@ -1224,19 +1258,35 @@
 
         <div style="display: flex; gap: 16px; justify-content: center;">
           <button id="replay-close-btn" class="primary" style="padding: 16px 32px; font-size: 1.1em;">
-            Continue
+            Back to Menu
           </button>
         </div>
       </div>
     `;
+    
+    replayModal.innerHTML = modalHTML;
 
     // Add close handler
     const closeBtn = document.getElementById('replay-close-btn');
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
         replayModal.remove();
+        // Return to menu
+        const menuScreen = document.getElementById('menu-screen');
+        const raceScreen = document.getElementById('race-screen');
+        if (menuScreen) menuScreen.style.display = 'flex';
+        if (raceScreen) raceScreen.style.display = 'none';
       });
     }
+  }
+  
+  async function playVisualReplay(frames, results) {
+    console.log('[Multiplayer] Playing visual replay with', frames.length, 'frames...');
+    
+    // TODO: Implement animated race replay using frames
+    // For now, show results modal after short delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    showResultsOnly(results);
   }
 
   // =====================================================
