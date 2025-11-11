@@ -3346,16 +3346,38 @@
     if (sprinting.length > 0) {
       const sprinter = sprinting[0];
       messages.push(`${sprinter.name} is pushing hard!`);
+      messages.push(`${sprinter.name} makes a move!`);
+    }
+    
+    // Overtaking attempts
+    racers.forEach(r => {
+      if (r.passCooldown < 2 && r.passCooldown > 0) {
+        messages.push(`${r.name} is trying to overtake!`);
+      }
+    });
+    
+    // Low stamina
+    const lowStamina = racers.filter(r => (r.energy / r.maxEnergy) < 0.25);
+    if (lowStamina.length > 0) {
+      messages.push(`${lowStamina[0].name} is losing stamina fast!`);
     }
     
     // Close race
     if (gap < 15 && progress > 0.5) {
       messages.push(`It's neck and neck between ${leader.name} and ${second.name}!`);
+      messages.push(`What a close race!`);
     }
     
     // Leader pulling away
     if (gap > 40 && progress > 0.3) {
       messages.push(`${leader.name} has a commanding lead!`);
+      messages.push(`${leader.name} is dominating this race!`);
+    }
+    
+    // Multiple horses in contention
+    const third = race.leaderboard[2];
+    if (third && (second.distance - third.distance) < 20 && progress > 0.6) {
+      messages.push(`Three horses battling for the win!`);
     }
     
     // Player specific

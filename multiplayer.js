@@ -1523,21 +1523,37 @@
     const sprinting = racers.filter(r => r.sprintMode);
     if (sprinting.length > 0) {
       messages.push(`${sprinting[0].name} is going all out!`);
+      messages.push(`${sprinting[0].name} makes their move!`);
+    }
+    
+    // Low stamina
+    const lowStamina = racers.filter(r => (r.energy / r.maxEnergy) < 0.25);
+    if (lowStamina.length > 0) {
+      messages.push(`${lowStamina[0].name} is running on fumes!`);
+      messages.push(`${lowStamina[0].name} is losing stamina fast!`);
     }
     
     // Close race
     if (gap < 15 && progress > 0.5) {
       messages.push(`It's neck and neck! This is a close race!`);
+      messages.push(`${leader.name} and ${second.name} are inseparable!`);
     }
     
     // Leader dominating
     if (gap > 40) {
       messages.push(`${leader.name} has pulled away!`);
+      messages.push(`${leader.name} is in complete control!`);
     }
     
     // Home straight
     if (progress > 0.8 && progress < 0.95) {
-      messages.push(`Into the home straight - anything can happen!`);
+      messages.push(`Into the home straight - who will win?!`);
+      messages.push(`The finish line is in sight!`);
+    }
+    
+    // Final lap tension
+    if (progress > 0.95) {
+      messages.push(`This is it! The final meters!`);
     }
     
     // Lead changes
