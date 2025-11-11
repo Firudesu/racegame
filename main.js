@@ -3128,19 +3128,15 @@
       }
     }
     
-    // CHASER: Save stamina, sprint in final phase (wait for home straight!)
+    // CHASER: Save stamina, ALWAYS sprint in final phase!
     if (style === 'Chaser') {
-      if (phase === 'final' && staminaRatio > 0.5) {
-        if (canOvertake && isCleanTrack && inStraight) {
-          return { sprint: true, reason: "Home straight attack with saved stamina!" };
-        }
-        if (isFallingBehind && staminaRatio > 0.55 && inStraight) {
-          return { sprint: true, reason: "Home straight sprint to close gap!" };
-        }
+      if (phase === 'final' && staminaRatio > 0.35) {
+        // ALWAYS sprint in final if have stamina (that's the strategy!)
+        return { sprint: true, reason: "Chaser final attack with saved stamina!" };
       }
-      // Early/middle: only sprint if desperately falling behind (prefer straights!)
-      if (phase !== 'final' && isFallingBehind && gapInUnits > 50 && staminaRatio > 0.7 && inStraight) {
-        return { sprint: true, reason: "Emergency sprint on straight!" };
+      // Early/middle: only if desperately behind
+      if (phase !== 'final' && isFallingBehind && gapInUnits > 60 && staminaRatio > 0.7) {
+        return { sprint: true, reason: "Emergency sprint!" };
       }
     }
     
@@ -3386,7 +3382,7 @@
       
       // Sprint stamina cost based on sprintEfficiency stat (TIGHTER RANGE)
       const sprintEffRating = racer.secondary?.sprintEfficiency || 60;
-      sprintDrainMultiplier = 2.8 - (sprintEffRating - 60) / 250; // 2.3x to 2.9x (tighter!)
+      sprintDrainMultiplier = 4.2 - (sprintEffRating - 60) / 200; // 3.5x to 4.5x (sprinting is EXPENSIVE!)
       
       // Only log once when sprint starts
       if (!racer.sprintStatsLogged) {
@@ -3400,50 +3396,50 @@
     }
     // ============================================
     
-    // PACER: Optimal stamina management
+    // PACER: Optimal stamina management (NERFED)
     const pacerCondition = racer.style === 'Pacer' && staminaRatio > 0.4 && staminaRatio < 0.8;
     if (pacerCondition) {
-      styleMultiplier *= 1.08; // +8% when managing well
+      styleMultiplier *= 1.04; // +4% when managing well (nerfed from +8%)
       if (!racer.pacerStrategyActive) {
         racer.pacerStrategyActive = true;
-        console.log(`⚖️ [Pacer Strategy] ${racer.name} in stamina sweet spot! +8% speed`);
+        console.log(`⚖️ [Pacer Strategy] ${racer.name} in stamina sweet spot! +4% speed`);
       }
     } else {
       racer.pacerStrategyActive = false;
     }
     
-    // CHASER: Burn stamina for final burst (will affect drain later)
+    // CHASER: Moderate final burst (NERFED)
     let styleDrainMultiplier = 1.0;
-    const chaserCondition = racer.style === 'Chaser' && phase === 'final' && rank > 2;
+    const chaserCondition = racer.style === 'Chaser' && phase === 'final' && rank > 1;
     if (chaserCondition) {
-      styleDrainMultiplier = 1.35; // Burn more stamina
-      styleMultiplier *= 1.12; // Get extra speed!
+      styleDrainMultiplier = 1.20; // Burn more stamina (nerfed from 1.35)
+      styleMultiplier *= 1.06; // Get extra speed! (nerfed from 1.12)
       if (!racer.chaserStrategyActive) {
         racer.chaserStrategyActive = true;
-        console.log(`⚡ [Chaser Strategy] ${racer.name} burning stamina for final push! +12% speed`);
+        console.log(`⚡ [Chaser Strategy] ${racer.name} burning stamina for final push! +6% speed`);
       }
     } else {
       racer.chaserStrategyActive = false;
     }
     
-    // SPRINTER: Buff early/middle phases + BIG final phase boost! (NERFED)
+    // SPRINTER: Moderate bonuses for tighter races
     if (racer.style === 'Sprinter') {
       if (phase === 'start') {
-        styleMultiplier *= 1.03; // +3% in start phase (nerfed from +5%)
+        styleMultiplier *= 1.02; // +2% in start phase
       } else if (phase === 'middle') {
-        styleMultiplier *= 1.05; // +5% in middle phase (nerfed from +8%)
+        styleMultiplier *= 1.03; // +3% in middle phase
       } else if (phase === 'final') {
         if (!racer.sprinterFinalPhaseLogged) {
           racer.sprinterFinalPhaseLogged = true;
-          console.log(`🏃 [Sprinter Surge] ${racer.name} activating final speed! +18%`);
+          console.log(`🏃 [Sprinter Surge] ${racer.name} activating final speed! +12%`);
         }
-        styleMultiplier *= 1.18; // +18% speed in final phase! (nerfed from +22%)
+        styleMultiplier *= 1.12; // +12% speed in final phase!
         if (progress > 0.9) {
           if (!racer.sprinterExplosionLogged) {
             racer.sprinterExplosionLogged = true;
-            console.log(`🚀 [Sprinter Explosion] ${racer.name} going ALL OUT! +30% speed!`);
+            console.log(`🚀 [Sprinter Explosion] ${racer.name} going ALL OUT! +18% speed!`);
           }
-          styleMultiplier *= 1.10; // ANOTHER +10% in last 10%! (Total +30%!) (nerfed from +15%)
+          styleMultiplier *= 1.06; // ANOTHER +6% in last 10%! (Total +18%!)
         }
       }
     }
@@ -3453,13 +3449,13 @@
       styleMultiplier *= 1.08; // +8% middle phase (was nothing!)
     }
     
-    // LEADER: Save stamina when ahead (will affect drain later) - NERFED
-    const leaderCondition = racer.style === 'Leader' && rank === 1 && progress < 0.6;
+    // LEADER: Minimal stamina advantage (HEAVILY NERFED)
+    const leaderCondition = racer.style === 'Leader' && rank === 1 && progress < 0.5;
     if (leaderCondition) {
-      styleDrainMultiplier = 0.80; // 20% less drain when leading early (nerfed from 35%)
+      styleDrainMultiplier = 0.90; // 10% less drain when leading early (nerfed from 20%)
       if (!racer.leaderStrategyActive) {
         racer.leaderStrategyActive = true;
-        console.log(`🎯 [Leader Strategy] ${racer.name} in 1st, conserving stamina (-20% drain)`);
+        console.log(`🎯 [Leader Strategy] ${racer.name} in 1st, conserving stamina (-10% drain)`);
       }
     } else {
       racer.leaderStrategyActive = false;
