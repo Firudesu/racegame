@@ -2695,7 +2695,7 @@
       console.log(`[Track Conditions] Adaptability: ${trackAdaptability}, Speed: ${(adjustedSpeedMod * 100).toFixed(1)}%, Stamina: ${(adjustedStaminaMod * 100).toFixed(1)}%`);
     }
     
-    const baseSpeed = Math.max(6, 6.0 + maneuverAdjusted.speed * 0.05) * adjustedSpeedMod; // DOUBLED for faster races!
+    const baseSpeed = Math.max(7, 7.0 + maneuverAdjusted.speed * 0.04) * adjustedSpeedMod; // Tighter speed ranges!
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
@@ -3354,7 +3354,11 @@
     if (racer.sprintMode && racer.sprintTimer <= 0) {
       racer.sprintMode = false;
       const burstFreqRating = racer.secondary?.burstFrequency || 60;
-      const cooldown = 5.5 - (burstFreqRating - 35) / 40; // 4.0s to 5.5s based on stat (MORE FREQUENT!)
+      // Chaser gets MUCH faster cooldown in final phase (rapid bursts!)
+      let cooldown = 5.5 - (burstFreqRating - 35) / 40; // 4.0s to 5.5s
+      if (racer.style === 'Chaser' && phase === 'final') {
+        cooldown = 2.0 - (burstFreqRating - 35) / 60; // 1.4s to 2.0s for Chaser in final!
+      }
       console.log(`💨 [Sprint End] ${racer.name} easing off (cooldown: ${cooldown.toFixed(1)}s)`);
       racer.sprintCooldown = cooldown;
     }
@@ -3449,13 +3453,13 @@
       styleMultiplier *= 1.08; // +8% middle phase (was nothing!)
     }
     
-    // LEADER: Minimal stamina advantage (HEAVILY NERFED)
-    const leaderCondition = racer.style === 'Leader' && rank === 1 && progress < 0.5;
+    // LEADER: Minimal bonus, push hard throughout
+    const leaderCondition = racer.style === 'Leader' && rank === 1 && progress < 0.4;
     if (leaderCondition) {
-      styleDrainMultiplier = 0.90; // 10% less drain when leading early (nerfed from 20%)
+      styleDrainMultiplier = 0.95; // 5% less drain when leading early (nerfed from 10%)
       if (!racer.leaderStrategyActive) {
         racer.leaderStrategyActive = true;
-        console.log(`🎯 [Leader Strategy] ${racer.name} in 1st, conserving stamina (-10% drain)`);
+        console.log(`🎯 [Leader Strategy] ${racer.name} in 1st, conserving stamina (-5% drain)`);
       }
     } else {
       racer.leaderStrategyActive = false;
