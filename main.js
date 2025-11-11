@@ -3118,13 +3118,13 @@
       }
     }
     
-    // PACER: Consistent tactical sprints
+    // PACER: Sprint when needed (not too much, not too little)
     if (style === 'Pacer') {
-      if (phase === 'middle' && staminaRatio > 0.5 && inStraight && (canOvertake || isFallingBehind)) {
+      if (phase === 'middle' && staminaRatio > 0.55 && inStraight && (canOvertake || isFallingBehind)) {
         return { sprint: true, reason: "Tactical positioning!" };
       }
-      if (phase === 'final' && staminaRatio > 0.4 && (rank > 2 || isFallingBehind)) {
-        return { sprint: true, reason: "Final push!" };
+      if (phase === 'final' && staminaRatio > 0.4 && inStraight) {
+        return { sprint: true, reason: "Final sprint!" };
       }
     }
     
@@ -3453,14 +3453,11 @@
       styleMultiplier *= 1.08; // +8% middle phase (was nothing!)
     }
     
-    // LEADER: Minimal bonus, push hard throughout
-    const leaderCondition = racer.style === 'Leader' && rank === 1 && progress < 0.4;
+    // LEADER: NO conserve bonus - push hard!
+    const leaderCondition = false; // DISABLED
     if (leaderCondition) {
-      styleDrainMultiplier = 0.95; // 5% less drain when leading early (nerfed from 10%)
-      if (!racer.leaderStrategyActive) {
-        racer.leaderStrategyActive = true;
-        console.log(`🎯 [Leader Strategy] ${racer.name} in 1st, conserving stamina (-5% drain)`);
-      }
+      styleDrainMultiplier = 1.0;
+      racer.leaderStrategyActive = false;
     } else {
       racer.leaderStrategyActive = false;
     }
