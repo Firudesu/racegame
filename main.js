@@ -2693,8 +2693,14 @@
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // BALANCED DRAIN: Target 35-55% finish stamina
-  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 8.0) * adjustedStaminaMod;
+    // DYNAMIC STAMINA DRAIN: Auto-balanced by stats
+  // High Stride → High Drain (pushing hard uses stamina)
+  // High Endurance → Low Drain (better stamina efficiency)
+  // Formula auto-balances to 35-55% finish stamina regardless of build!
+  const strideDrainFactor = stats.stride / 150; // 0.53 for stride 79
+  const enduranceEfficiency = stats.endurance / 180; // 0.37 for endurance 66
+  const drainBalance = 0.40 + strideDrainFactor - enduranceEfficiency;
+  const staminaDrain = Math.max(0.08, drainBalance * 6.0) * adjustedStaminaMod;
 
     const racerObj = {
       id,
