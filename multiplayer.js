@@ -461,26 +461,34 @@
       // Wait a moment for Player 1 to finish creating the race
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Find the most recent race involving our player
-      const { data: recentRaces, error } = await supabase
-        .from('races')
-        .select('*')
-        .contains('player_ids', [multiplayerState.currentPlayer.id])
-        .eq('status', 'completed')
-        .order('completed_at', { ascending: false })
+      // Find MY race that I just participated in (not viewed yet!)
+      const { data: participants, error } = await supabase
+        .from('race_participants')
+        .select('race_id, viewed, races(*)')
+        .eq('player_id', multiplayerState.currentPlayer.id)
+        .eq('viewed', false)
+        .order('created_at', { ascending: false })
         .limit(1);
 
       if (error) throw error;
 
-      if (recentRaces && recentRaces.length > 0) {
-        const race = recentRaces[0];
-        console.log('[Multiplayer] Found race:', race.id);
+      if (participants && participants.length > 0) {
+        const raceData = participants[0].races;
+        console.log('[Multiplayer] Found MY unviewed race:', raceData.id);
+        
+        // Mark as viewed
+        await supabase
+          .from('race_participants')
+          .update({ viewed: true })
+          .eq('player_id', multiplayerState.currentPlayer.id)
+          .eq('race_id', raceData.id);
         
         // Show the race results
-        await showRaceReplay(race.id, race);
+        await showRaceReplay(raceData.id, raceData);
       } else {
-        console.log('[Multiplayer] No race found yet, showing notification...');
-        showNotification('🏁 Race completed! Check back in a moment.');
+        console.log('[Multiplayer] No unviewed race found yet, waiting...');
+        // Retry after 2 seconds
+        setTimeout(() => handleRaceStarted(), 2000);
       }
 
     } catch (error) {
