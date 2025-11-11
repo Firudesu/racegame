@@ -239,10 +239,26 @@
     console.log('[Multiplayer] horse.avatar:', horse.avatar);
     console.log('[Multiplayer] horse.avatar?.stats:', horse.avatar?.stats);
 
-    // Prepare horse data snapshot - handle different possible structures
-    // The horse from roster has stats directly OR in .avatar
-    const stats = horse.stats || horse.avatar?.stats || {};
-    console.log('[Multiplayer] Extracted stats:', JSON.stringify(stats));
+    // Prepare horse data snapshot - handle ALL possible structures
+    // Priority: direct stats > avatar.stats > default
+    let stats = {};
+    if (horse.stats && Object.keys(horse.stats).length > 0) {
+      stats = horse.stats;
+      console.log('[Multiplayer] Using direct stats:', JSON.stringify(stats));
+    } else if (horse.avatar && horse.avatar.stats && Object.keys(horse.avatar.stats).length > 0) {
+      stats = horse.avatar.stats;
+      console.log('[Multiplayer] Using avatar.stats:', JSON.stringify(stats));
+    } else {
+      // FALLBACK: Use default stats if nothing found
+      stats = {
+        stride: 60,
+        endurance: 55,
+        force: 48,
+        resolve: 42,
+        insight: 50
+      };
+      console.log('[Multiplayer] ⚠️ No stats found, using defaults:', JSON.stringify(stats));
+    }
     
     const horseData = {
       id: horse.id,
@@ -834,8 +850,31 @@
       const unfinished = race.racers.filter(r => !r.finished);
       if (unfinished.length === 0) break;
       
-      // Use EXACT single-player race engine for 100% parity!
-      RaceSim.updateRace(race, TRACK_STEP);
+      // Use single-player stepRacer (updateRace does too much for headless!)
+      race.racers.forEach(racer => {
+        if (!racer.finished) {
+          RaceSim.stepRacer(racer, TRACK_STEP, race);
+          
+          // Check if finished
+          if (racer.distance >= TRACK_LENGTH && !racer.finished) {
+            racer.finished = true;
+            racer.finishTime = race.time;
+            const finalEnergy = Math.round((racer.energy / racer.maxEnergy) * 100);
+            racer.energyHistory = racer.energyHistory || [];
+            racer.energyHistory.push({ time: race.time, energy: finalEnergy });
+            race.finishedOrder.push(racer);
+            console.log(`[Multiplayer] 🏁 ${racer.name} finished in ${racer.finishTime.toFixed(2)}s with ${finalEnergy}% energy`);
+          }
+        }
+      });
+      
+      // Update leaderboard
+      race.leaderboard = [...race.racers].sort((a, b) => {
+        if (a.finished && b.finished) return a.finishTime - b.finishTime;
+        if (a.finished) return -1;
+        if (b.finished) return 1;
+        return b.distance - a.distance;
+      });
       
       // Capture frame data every 10 steps (for replay)
       if (frameCounter % 10 === 0) {
