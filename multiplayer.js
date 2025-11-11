@@ -611,8 +611,10 @@
     showNotification('🏁 Race starting! Simulating...');
 
     try {
-      // Simulate race first
+      // Simulate race first with FULL mechanics
       const raceResults = simulateRace(queueEntries);
+      
+      console.log(`[Multiplayer] 🎬 Simulation complete! Frames captured: ${raceResults.replayData?.frames?.length || 0}`);
       
       // Extract player IDs
       const playerIds = queueEntries.map(e => e.player_id);
