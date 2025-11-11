@@ -4379,5 +4379,8 @@
     START_PHASE_LIMIT,
     FINAL_PHASE_START
   };
+  
+  // Export showScreen for multiplayer
+  window.showScreen = showScreen;
 
   })();
