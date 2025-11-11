@@ -922,12 +922,12 @@
       if (frameCounter % 2 === 0) { // Every 2 steps = 10fps replay
         frames.push({
           time: race.time,
-          leaderboard: race.leaderboard.map(r => ({ id: r.id, distance: r.distance })),
+          leaderboard: race.leaderboard.map(r => ({ id: r.id, name: r.name || 'Unknown', distance: r.distance })),
           racers: race.racers.map(r => ({
             // Core identity
             id: r.id,
-            name: r.name,
-            color: r.color,
+            name: r.name || r.horseName || 'Unknown',
+            color: r.color || '#64b5f6',
             isPlayer: r.isPlayer,
             isRealPlayer: r.isRealPlayer,
             
@@ -1526,29 +1526,34 @@
     const messages = [];
     
     // Sprint commentary
-    const sprinting = racers.filter(r => r.sprintMode);
+    const sprinting = racers.filter(r => r.sprintMode && r.name);
     if (sprinting.length > 0) {
-      messages.push(`${sprinting[0].name} is going all out!`);
-      messages.push(`${sprinting[0].name} makes their move!`);
+      const name = sprinting[0].name || 'A horse';
+      messages.push(`${name} is going all out!`);
+      messages.push(`${name} makes their move!`);
     }
     
     // Low stamina
-    const lowStamina = racers.filter(r => (r.energy / r.maxEnergy) < 0.25);
+    const lowStamina = racers.filter(r => r.name && (r.energy / r.maxEnergy) < 0.25);
     if (lowStamina.length > 0) {
-      messages.push(`${lowStamina[0].name} is running on fumes!`);
-      messages.push(`${lowStamina[0].name} is losing stamina fast!`);
+      const name = lowStamina[0].name || 'A horse';
+      messages.push(`${name} is running on fumes!`);
+      messages.push(`${name} is losing stamina fast!`);
     }
     
     // Close race
     if (gap < 15 && progress > 0.5) {
+      const leaderName = leader.name || 'The leader';
+      const secondName = second.name || 'second place';
       messages.push(`It's neck and neck! This is a close race!`);
-      messages.push(`${leader.name} and ${second.name} are inseparable!`);
+      messages.push(`${leaderName} and ${secondName} are inseparable!`);
     }
     
     // Leader dominating
     if (gap > 40) {
-      messages.push(`${leader.name} has pulled away!`);
-      messages.push(`${leader.name} is in complete control!`);
+      const leaderName = leader.name || 'The leader';
+      messages.push(`${leaderName} has pulled away!`);
+      messages.push(`${leaderName} is in complete control!`);
     }
     
     // Home straight
@@ -1563,7 +1568,7 @@
     }
     
     // Lead changes
-    if (race.lastLeaderId && race.lastLeaderId !== leader.id) {
+    if (race.lastLeaderId && race.lastLeaderId !== leader.id && leader.name) {
       messages.push(`${leader.name} takes the lead!`);
       race.lastLeaderId = leader.id;
     }
