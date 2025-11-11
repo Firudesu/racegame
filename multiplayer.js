@@ -903,6 +903,22 @@
         return b.distance - a.distance;
       });
       
+      // Capture frame data every 10 steps (for replay)
+      if (frameCounter % 10 === 0) {
+        frames.push({
+          time: race.time,
+          racers: race.racers.map(r => ({
+            id: r.id,
+            name: r.name,
+            distance: r.distance,
+            energy: r.energy,
+            speed: r.speed || racer.baseSpeed,
+            finished: r.finished,
+            finishTime: r.finishTime
+          }))
+        });
+      }
+      
       race.time += TRACK_STEP;
       frameCounter++;
     }
@@ -1349,11 +1365,19 @@
       closeBtn.onclick = () => {
         console.log('[Multiplayer] Closing results modal...');
         replayModal.remove();
-        // Return to menu
-        const menuScreen = document.getElementById('menu-screen');
-        const raceScreen = document.getElementById('race-screen');
-        if (menuScreen) menuScreen.style.display = 'flex';
-        if (raceScreen) raceScreen.style.display = 'none';
+        
+        // Force show menu using the game's showScreen function
+        if (typeof window.showScreen === 'function') {
+          window.showScreen('menu');
+        } else {
+          // Manual fallback
+          ['menu-screen', 'training-screen', 'race-screen', 'paddock-screen', 'retired-screen'].forEach(id => {
+            const screen = document.getElementById(id);
+            if (screen) {
+              screen.style.display = id === 'menu-screen' ? 'flex' : 'none';
+            }
+          });
+        }
       };
     }
   }
