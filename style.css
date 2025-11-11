@@ -306,6 +306,44 @@ body {
   margin-top: 18px;
 }
 
+/* Race Commentary Box */
+.race-commentary {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  max-width: 90%;
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.95), rgba(167, 66, 255, 0.85));
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  padding: 16px 24px;
+  box-shadow: 0 8px 32px rgba(0, 212, 255, 0.4);
+  z-index: 50;
+  pointer-events: none;
+  animation: commentaryPulse 0.3s ease-out;
+}
+
+.commentary-text {
+  font-size: 1.2rem;
+  font-weight: bold;
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  line-height: 1.4;
+}
+
+@keyframes commentaryPulse {
+  0% {
+    transform: translateX(-50%) scale(0.95);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+}
+
 button {
   background: rgba(0, 212, 255, 0.15);
   border: 2px solid rgba(0, 212, 255, 0.4);

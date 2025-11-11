@@ -3298,9 +3298,117 @@
 
     updateLeaderboard(race);
     updateHud(player, race);
+    updateCommentary(race, dt);
 
     if (race.finishedOrder.length === race.racers.length) {
       concludeRace();
+    }
+  }
+  
+  // Live Race Commentary System
+  let commentaryTimer = 0;
+  let lastCommentary = '';
+  
+  function updateCommentary(race, dt) {
+    if (!race || !race.running) return;
+    
+    commentaryTimer += dt;
+    
+    // Update commentary every 3-5 seconds
+    if (commentaryTimer < 3) return;
+    commentaryTimer = 0;
+    
+    const commentary = generateCommentary(race);
+    if (commentary && commentary !== lastCommentary) {
+      showCommentary(commentary);
+      lastCommentary = commentary;
+    }
+  }
+  
+  function generateCommentary(race) {
+    const racers = race.racers.filter(r => !r.finished);
+    if (racers.length === 0) return null;
+    
+    const leader = race.leaderboard[0];
+    const second = race.leaderboard[1];
+    const player = race.racers.find(r => r.isPlayer);
+    
+    if (!leader || !second) return null;
+    
+    const gap = leader.distance - second.distance;
+    const progress = leader.distance / (race.trackLength || 1200);
+    
+    // Priority commentary based on exciting events
+    const messages = [];
+    
+    // Sprint commentary
+    const sprinting = racers.filter(r => r.sprintMode);
+    if (sprinting.length > 0) {
+      const sprinter = sprinting[0];
+      messages.push(`${sprinter.name} is pushing hard!`);
+    }
+    
+    // Close race
+    if (gap < 15 && progress > 0.5) {
+      messages.push(`It's neck and neck between ${leader.name} and ${second.name}!`);
+    }
+    
+    // Leader pulling away
+    if (gap > 40 && progress > 0.3) {
+      messages.push(`${leader.name} has a commanding lead!`);
+    }
+    
+    // Player specific
+    if (player && !player.finished) {
+      const playerRank = race.leaderboard.findIndex(r => r.id === player.id) + 1;
+      const stamina = (player.energy / player.maxEnergy) * 100;
+      
+      if (playerRank === 1 && gap > 20) {
+        messages.push(`You're dominating the field!`);
+      } else if (playerRank === 1 && gap < 10) {
+        messages.push(`You're in the lead but it's close!`);
+      } else if (playerRank === 2 && gap < 15) {
+        messages.push(`You're challenging for the lead!`);
+      } else if (playerRank > 2 && progress > 0.7) {
+        messages.push(`You're making a late charge!`);
+      }
+      
+      if (stamina < 20 && progress < 0.9) {
+        messages.push(`You're running low on stamina!`);
+      }
+    }
+    
+    // Phase commentary
+    if (progress < 0.25) {
+      messages.push(`They're off to a strong start!`);
+    } else if (progress > 0.8 && progress < 0.95) {
+      messages.push(`It's the home straight - who will win?!`);
+    }
+    
+    // Lead changes
+    if (!race.lastLeaderId) race.lastLeaderId = leader.id;
+    if (race.lastLeaderId !== leader.id) {
+      messages.push(`${leader.name} takes the lead!`);
+      race.lastLeaderId = leader.id;
+    }
+    
+    // Return random message from available ones
+    return messages.length > 0 ? messages[Math.floor(Math.random() * messages.length)] : null;
+  }
+  
+  function showCommentary(text) {
+    const commentaryEl = document.getElementById('commentary-text');
+    if (!commentaryEl) return;
+    
+    commentaryEl.textContent = text;
+    
+    // Trigger animation restart
+    const container = document.getElementById('race-commentary');
+    if (container) {
+      container.style.animation = 'none';
+      setTimeout(() => {
+        container.style.animation = 'commentaryPulse 0.3s ease-out';
+      }, 10);
     }
   }
 
