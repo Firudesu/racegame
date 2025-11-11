@@ -3342,36 +3342,40 @@
     const messages = [];
     
     // Sprint commentary
-    const sprinting = racers.filter(r => r.sprintMode);
+    const sprinting = racers.filter(r => r.sprintMode && r.name);
     if (sprinting.length > 0) {
-      const sprinter = sprinting[0];
-      messages.push(`${sprinter.name} is pushing hard!`);
-      messages.push(`${sprinter.name} makes a move!`);
+      const name = sprinting[0].name || 'A horse';
+      messages.push(`${name} is pushing hard!`);
+      messages.push(`${name} makes a move!`);
     }
     
     // Overtaking attempts
     racers.forEach(r => {
-      if (r.passCooldown < 2 && r.passCooldown > 0) {
+      if (r.passCooldown < 2 && r.passCooldown > 0 && r.name) {
         messages.push(`${r.name} is trying to overtake!`);
       }
     });
     
     // Low stamina
-    const lowStamina = racers.filter(r => (r.energy / r.maxEnergy) < 0.25);
+    const lowStamina = racers.filter(r => r.name && (r.energy / r.maxEnergy) < 0.25);
     if (lowStamina.length > 0) {
-      messages.push(`${lowStamina[0].name} is losing stamina fast!`);
+      const name = lowStamina[0].name || 'A horse';
+      messages.push(`${name} is losing stamina fast!`);
     }
     
     // Close race
     if (gap < 15 && progress > 0.5) {
-      messages.push(`It's neck and neck between ${leader.name} and ${second.name}!`);
+      const leaderName = leader.name || 'The leader';
+      const secondName = second.name || 'second place';
+      messages.push(`It's neck and neck between ${leaderName} and ${secondName}!`);
       messages.push(`What a close race!`);
     }
     
     // Leader pulling away
     if (gap > 40 && progress > 0.3) {
-      messages.push(`${leader.name} has a commanding lead!`);
-      messages.push(`${leader.name} is dominating this race!`);
+      const leaderName = leader.name || 'The leader';
+      messages.push(`${leaderName} has a commanding lead!`);
+      messages.push(`${leaderName} is dominating this race!`);
     }
     
     // Multiple horses in contention
@@ -3409,7 +3413,7 @@
     
     // Lead changes
     if (!race.lastLeaderId) race.lastLeaderId = leader.id;
-    if (race.lastLeaderId !== leader.id) {
+    if (race.lastLeaderId !== leader.id && leader.name) {
       messages.push(`${leader.name} takes the lead!`);
       race.lastLeaderId = leader.id;
     }
