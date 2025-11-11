@@ -919,8 +919,9 @@
       });
     }
     
-    console.log('[Multiplayer] Simulation complete! Race time:', race.time.toFixed(2), 'seconds');
-    console.log('[Multiplayer] Captured', frames.length, 'replay frames');
+    console.log('[Multiplayer] ✅ Simulation complete! Race time:', race.time.toFixed(2), 'seconds');
+    console.log('[Multiplayer] ✅ Total frames:', frameCounter, '| Replay frames captured:', frames.length);
+    console.log('[Multiplayer] ✅ Finished order:', race.finishedOrder.map(r => r.name).join(', '));
     
     // Collect results
     const allResults = race.finishedOrder.map((racer, index) => {
