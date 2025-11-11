@@ -240,12 +240,15 @@
     console.log('[Multiplayer] horse.avatar?.stats:', horse.avatar?.stats);
 
     // Prepare horse data snapshot - handle different possible structures
-    // The horse from roster has stats nested in .avatar
+    // The horse from roster has stats directly OR in .avatar
+    const stats = horse.stats || horse.avatar?.stats || {};
+    console.log('[Multiplayer] Extracted stats:', JSON.stringify(stats));
+    
     const horseData = {
       id: horse.id,
       name: horse.name,
       image_url: horse.image_url || horse.image || horse.portrait || horse.avatar?.portrait,
-      stats: horse.avatar?.stats || horse.stats || {},
+      stats: stats,
       skills: horse.avatar?.skills || horse.skills || [],
       style: horse.avatar?.style || horse.style || 'Pacer',
       aptitudes: horse.avatar?.aptitudes || horse.aptitudes || {},
@@ -1036,17 +1039,33 @@
     console.log('[Multiplayer] walletState:', window.walletState);
     console.log('[Multiplayer] state.avatar:', window.state?.avatar);
     
-    // Try to get selected horse from the existing game state
+    // Primary: Use state.avatar (has all current stats including training!)
+    if (window.state && window.state.avatar && window.state.avatar.stats) {
+      console.log('[Multiplayer] ✅ Using state.avatar (has current stats):', window.state.avatar.name);
+      console.log('[Multiplayer] Avatar stats:', window.state.avatar.stats);
+      return {
+        id: window.state.avatar.id || window.walletState?.selectedId || 'avatar',
+        name: window.state.avatar.name,
+        stats: window.state.avatar.stats,
+        skills: window.state.avatar.skills || [],
+        style: window.state.avatar.style || 'Pacer',
+        avatar: window.state.avatar,
+        image: window.state.avatar.portrait,
+        tokenId: window.state.avatar.tokenId
+      };
+    }
+    
+    // Fallback: try roster (might have outdated stats)
     if (window.walletState && window.walletState.selectedId) {
       const roster = window.walletState.roster || [];
       const selected = roster.find(h => h.id === window.walletState.selectedId);
       if (selected) {
-        console.log('[Multiplayer] ✅ Found selected horse from roster:', selected.name);
+        console.log('[Multiplayer] ⚠️ Using roster horse (might be outdated):', selected.name);
         return selected;
       }
     }
 
-    // Fallback: try to get from state.avatar
+    // Last fallback: try to get from state.avatar
     if (window.state && window.state.avatar) {
       const horseData = {
         id: window.state.avatar.id || 'avatar-horse',
@@ -1222,9 +1241,9 @@
     console.log('[Multiplayer] Displaying', results.length, 'race results');
     
     const modalHTML = `
-      <div style="max-width: 800px; width: 100%; background: linear-gradient(135deg, rgba(20, 20, 40, 0.95), rgba(40, 40, 80, 0.95)); border-radius: 24px; padding: 40px; border: 3px solid var(--accent);">
+      <div style="max-width: 800px; width: 100%; background: linear-gradient(135deg, rgba(20, 20, 40, 0.95), rgba(40, 40, 80, 0.95)); border-radius: 24px; padding: 40px; border: 3px solid var(--accent); pointer-events: all;">
         <h2 style="margin: 0 0 30px 0; text-align: center; color: var(--accent); font-size: 2em;">
-          🏁 Race Results
+          🏁 Multiplayer Race Results
         </h2>
         
         <div style="background: rgba(0, 0, 0, 0.3); border-radius: 16px; padding: 24px; margin-bottom: 30px;">
@@ -1249,7 +1268,7 @@
         </div>
 
         <div style="display: flex; gap: 16px; justify-content: center;">
-          <button id="replay-close-btn" class="primary" style="padding: 16px 32px; font-size: 1.1em;">
+          <button id="replay-close-btn" class="primary" style="padding: 16px 32px; font-size: 1.1em; cursor: pointer; pointer-events: all;">
             Back to Menu
           </button>
         </div>
@@ -1257,18 +1276,20 @@
     `;
     
     replayModal.innerHTML = modalHTML;
+    replayModal.style.pointerEvents = 'all';
 
-    // Add close handler
+    // Add close handler with immediate response
     const closeBtn = document.getElementById('replay-close-btn');
     if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
+      closeBtn.onclick = () => {
+        console.log('[Multiplayer] Closing results modal...');
         replayModal.remove();
         // Return to menu
         const menuScreen = document.getElementById('menu-screen');
         const raceScreen = document.getElementById('race-screen');
         if (menuScreen) menuScreen.style.display = 'flex';
         if (raceScreen) raceScreen.style.display = 'none';
-      });
+      };
     }
   }
   
