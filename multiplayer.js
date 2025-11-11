@@ -821,13 +821,17 @@
       leaderboard: racers.slice()
     };
     
-    console.log('[Multiplayer] Starting FULL headless simulation...');
+    console.log('[Multiplayer] Starting FULL headless simulation using single-player engine...');
     
-    // Run full simulation frame-by-frame
+    // Use the EXACT same engine as single-player!
     const TRACK_STEP = RaceSim.TRACK_STEP;
     const TRACK_LENGTH = RaceSim.TRACK_LENGTH;
-    const MAX_RACE_TIME = 500; // 8 minutes max to let slower horses finish
+    const MAX_RACE_TIME = 300; // 5 minutes max
     const frames = []; // Capture replay data
+    
+    // Add track conditions to race object
+    race.trackConditions = trackConditions;
+    race.trackLength = TRACK_LENGTH;
     
     let frameCounter = 0;
     while (race.time < MAX_RACE_TIME) {
@@ -835,154 +839,8 @@
       const unfinished = race.racers.filter(r => !r.finished);
       if (unfinished.length === 0) break;
       
-      // Simplified race update - just move horses forward based on stats
-      race.racers.forEach(racer => {
-        if (racer.finished) return;
-        
-        // Starting break delay - horse hasn't broken from gate yet
-        if (!racer.hasStarted) {
-          const raceStartTime = racer.startingBreakDelay || 0;
-          if (race.time < raceStartTime) {
-            racer.speed = 0;
-            racer.distance = 0;
-            return; // Don't move until break time
-          } else {
-            racer.hasStarted = true;
-            console.log(`[Break] ${racer.name} broke from gate at ${race.time.toFixed(2)}s (delay: ${raceStartTime.toFixed(3)}s)`);
-          }
-        }
-        
-        // Initialize distance if not set
-        if (!racer.distance) racer.distance = 0;
-        
-        // Calculate speed based on stats and stamina
-        const progress = racer.distance / TRACK_LENGTH;
-        const staminaRatio = racer.energy / racer.maxEnergy;
-        
-        // Reduce speed stat dominance for closer races
-        const baseSpeed = 4.0 + (racer.performance.speed * 0.03); // Narrower range!
-        
-        // Calculate current rank
-        const sortedByDistance = race.racers.filter(r => !r.finished).sort((a, b) => b.distance - a.distance);
-        const rank = sortedByDistance.findIndex(r => r.id === racer.id) + 1;
-        
-        // Style multiplier with strategic bonuses
-        let styleBonus = getStyleMultiplier(racer.style, progress);
-        
-        // LEADER STRATEGY: Conserve stamina when in front
-        if (racer.style === 'Leader' && rank === 1) {
-          baseDrain *= 0.65; // Save 35% stamina when leading!
-          console.log(`[Strategy] ${racer.name} (Leader) is in 1st - conserving stamina!`);
-        }
-        
-        // PACER STRATEGY: Bonus when managing stamina well
-        if (racer.style === 'Pacer' && staminaRatio > 0.4 && staminaRatio < 0.8) {
-          styleBonus *= 1.08; // +8% speed when in stamina sweet spot
-        }
-        
-        // CHASER STRATEGY: Aggressive final push when behind
-        if (racer.style === 'Chaser' && progress > 0.7 && rank > 2) {
-          baseDrain *= 1.4; // Burn 40% more stamina
-          styleBonus *= 1.15; // But get +15% speed!
-          console.log(`[Strategy] ${racer.name} (Chaser) going all-out!`);
-        }
-        
-        const energyFactor = Math.max(0.4, staminaRatio);
-        
-        // Skills boost (POWERFUL - can change race outcome!)
-        let skillBoost = 1.0;
-        if (racer.skills && racer.skills.length > 0) {
-          // Trigger skills at appropriate phases
-          racer.skills.forEach(skill => {
-            if (skill.used) return;
-            
-            // Determine if skill should trigger
-            const shouldTrigger = 
-              (skill.trigger === 'start' && progress < 0.25) ||
-              (skill.trigger === 'middle' && progress >= 0.25 && progress < 0.8) ||
-              (skill.trigger === 'final' && progress >= 0.8);
-            
-            // Skill activation affected by skillProc, mood, AND stamina!
-            const skillProc = racer.profile?.secondary?.skillProc || 60;
-            const mood = racer.mood || 70;
-            
-            let baseChance = 0.55 + (skillProc - 60) / 100;
-            
-            // Mood bonus: Happy horses activate skills more!
-            const moodBonus = (mood - 70) / 150;
-            baseChance += moodBonus;
-            
-            // Stamina requirement: Need 40%+ stamina to use skills
-            const staminaBonus = staminaRatio > 0.6 ? 0.15 : staminaRatio > 0.4 ? 0.05 : -0.2;
-            baseChance += staminaBonus;
-            
-            const finalChance = clamp(baseChance, 0.35, 0.95);
-            
-            if (staminaRatio < 0.3) {
-              console.log(`[Skills] ${racer.name} too exhausted to use ${skill.name} (${Math.round(staminaRatio * 100)}% stamina)`);
-            }
-            
-            if (shouldTrigger && Math.random() < finalChance) {
-              skill.used = true;
-              skill.active = true;
-              // LONGER duration (2.0x for major impact!)
-              skill.timer = (skill.duration || 4) * 2.0;
-              console.log(`[Multiplayer] ⚡⚡ ${racer.name} activated ${skill.name} (+${Math.round(skill.boost * 250)}% for ${skill.timer.toFixed(1)}s)!`);
-            }
-            
-            if (skill.active && skill.timer > 0) {
-              // POWERFUL boost for comebacks (2.5x)
-              const rawBoost = skill.boost || 0.15;
-              const enhancedBoost = rawBoost * 2.5;
-              skillBoost += enhancedBoost;
-              skill.timer -= TRACK_STEP;
-              
-              if (skill.timer <= 0) {
-                skill.active = false;
-                console.log(`[Multiplayer] ${racer.name}'s ${skill.name} ended`);
-              }
-            }
-          });
-        }
-        
-        const speed = baseSpeed * styleBonus * energyFactor * skillBoost;
-        
-        // Move forward
-        racer.distance += speed * TRACK_STEP;
-        
-        // Drain stamina (NUCLEAR - force 20-30% finish stamina!)
-        const intensity = speed / baseSpeed;
-        let baseDrain = 11.0 * TRACK_STEP * intensity; // Increased from 8.5 - everyone exhausted!
-        
-        // Apply paceControl from secondary stats (MAJOR impact!)
-        const paceControl = racer.profile?.secondary?.paceControl || 60;
-        // Good paceControl (80+) can reduce drain by 30%!
-        const paceEfficiency = clamp(1 - (paceControl - 60) / 120, 0.7, 1.3);
-        
-        // fatigueResistance also helps
-        const fatigueResist = racer.profile?.secondary?.fatigueResistance || 60;
-        const fatigueEfficiency = clamp(1 - (fatigueResist - 60) / 150, 0.75, 1.25);
-        
-        const drain = baseDrain * paceEfficiency * fatigueEfficiency;
-        racer.energy = Math.max(0, racer.energy - drain);
-        
-        // If energy hits 0, MAJOR speed penalty!
-        if (racer.energy <= 0) {
-          energyFactor = 0.35; // 65% speed loss when exhausted!
-          console.log(`[Multiplayer] 💀 ${racer.name} is EXHAUSTED!`);
-        }
-        
-        // Check if finished
-        if (racer.distance >= TRACK_LENGTH) {
-          racer.finished = true;
-          racer.finishTime = race.time;
-          const finalEnergy = Math.round((racer.energy / racer.maxEnergy) * 100);
-          race.finishedOrder.push(racer);
-          console.log(`[Multiplayer] 🏁 ${racer.name} finished in ${racer.finishTime.toFixed(2)}s with ${finalEnergy}% energy`);
-        }
-      });
-      
-      race.time += TRACK_STEP;
+      // Use EXACT single-player race engine for 100% parity!
+      RaceSim.updateRace(race, TRACK_STEP);
       
       // Capture frame data every 10 steps (for replay)
       if (frameCounter % 10 === 0) {
