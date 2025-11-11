@@ -3453,7 +3453,9 @@
     
       const paceControl = racer.secondary?.paceControl ?? 60;
       const paceEfficiency = clamp(1 + (paceControl - 60) / 220 * (1 - staminaRatio), 0.85, 1.25);
-      const energyFactor = Math.max(0.4, staminaRatio) * paceEfficiency;
+      // Energy factor BUFFED: Less penalty when tired (0.4 → 0.80 min)
+      const rawEnergyFactor = staminaRatio > 0.75 ? 1 : staminaRatio > 0.5 ? 0.92 + staminaRatio * 0.16 : staminaRatio > 0.25 ? 0.85 + staminaRatio * 0.14 : 0.80;
+      const energyFactor = Math.max(0.80, rawEnergyFactor) * paceEfficiency;
     const skillMultiplier = resolveSkillMultiplier(racer, dt);
     const resolveBoost = phase === "final" && racer.stats.resolve > 40 ? 1 + (racer.stats.resolve - 40) * 0.005 : 1;
     const moodPercent = clamp(Math.round(racer.mood ?? 70), 0, 120);
