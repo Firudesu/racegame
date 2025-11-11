@@ -308,12 +308,10 @@ body {
 
 /* Race Commentary Box */
 .race-commentary {
-  position: absolute;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%);
+  position: relative;
   width: 600px;
   max-width: 90%;
+  margin: 16px auto;
   background: linear-gradient(135deg, rgba(0, 212, 255, 0.95), rgba(167, 66, 255, 0.85));
   border: 2px solid var(--accent);
   border-radius: 12px;
@@ -322,6 +320,10 @@ body {
   z-index: 50;
   pointer-events: none;
   animation: commentaryPulse 0.3s ease-out;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .commentary-text {
