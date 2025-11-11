@@ -2567,7 +2567,9 @@
       mood: config.playerSnapshot.mood,
       performance: config.playerSnapshot.performance,
       profile: config.playerSnapshot.profile,
-      aptitudes: config.playerSnapshot.aptitudes
+      aptitudes: config.playerSnapshot.aptitudes,
+      portrait: state.avatar.portrait,
+      image: state.avatar.portrait || state.avatar.image
     });
     player.startAggro = rng();
     const playerDecisionFactor = clamp(player.zoneDecisionFactorBase ?? 1, 0.5, 1.3);
@@ -2639,7 +2641,9 @@
       mood,
       performance,
       profile,
-      aptitudes
+      aptitudes,
+      portrait,
+      image
     }) {
     const maxEnergy = 100 + stats.endurance * 10;
     
@@ -2736,6 +2740,8 @@
       skillLog: [],
       rngModifier: 0,
       mood,
+      portrait: portrait || image || null,
+      image: image || portrait || null,
       skillToast: null,
       energyHistory: [{ time: 0, energy: 100 }],
       energySampleTimer: 0,
