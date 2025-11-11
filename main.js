@@ -2699,14 +2699,16 @@
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // DYNAMIC STAMINA DRAIN: Auto-balanced by stats
-  // High Stride → High Drain (pushing hard uses stamina)
-  // High Endurance → Low Drain (better stamina efficiency)
-  // Formula auto-balances to 35-55% finish stamina regardless of build!
-  const strideDrainFactor = stats.stride / 150; // 0.53 for stride 79
-  const enduranceEfficiency = stats.endurance / 180; // 0.37 for endurance 66
-  const drainBalance = 0.40 + strideDrainFactor - enduranceEfficiency;
-  const staminaDrain = Math.max(0.08, drainBalance * 5.0) * adjustedStaminaMod; // Reduced 6.0 → 5.0
+    // PERCENTAGE-BASED AUTO-BALANCING STAMINA DRAIN
+  // Everyone finishes with 35-50% stamina regardless of build!
+  // System calculates expected race time and normalizes drain
+  const expectedSpeed = baseSpeed * 0.85; // Account for energy loss, sprints, etc.
+  const expectedRaceTime = TRACK_LENGTH / expectedSpeed; // ~140-180s
+  const targetStaminaLoss = 0.50; // Target: Use 50% of stamina pool
+  const baseDrainRate = (maxEnergy * targetStaminaLoss) / expectedRaceTime;
+  // Personalize by build: High stride drains more, high endurance drains less
+  const buildModifier = 0.95 + (stats.stride - stats.endurance) / 300;
+  const staminaDrain = Math.max(0.08, baseDrainRate * buildModifier) * adjustedStaminaMod;
 
     const racerObj = {
       id,
@@ -2800,7 +2802,7 @@
     console.log(`  📊 Primary Stats: Stride=${stats.stride}, End=${stats.endurance}, Force=${stats.force}, Resolve=${stats.resolve}, Insight=${stats.insight}`);
     console.log(`  ⚡ Performance: Speed=${maneuverAdjusted.speed}, Handling=${maneuverAdjusted.handling}, Maneuver=${maneuverAdjusted.maneuver}`);
     console.log(`  🏎️ FINAL Base Speed: ${racerObj.baseSpeed.toFixed(3)}, Max Speed: ${racerObj.maxSpeed.toFixed(3)}, Acceleration: ${racerObj.acceleration.toFixed(2)}`);
-    console.log(`  💧 Stamina Drain: ${staminaDrain.toFixed(3)}/s, Max Energy: ${maxEnergy}`);
+    console.log(`  💧 Stamina Drain: ${staminaDrain.toFixed(3)}/s, Max Energy: ${maxEnergy} (Expected finish: ${(100 - (staminaDrain * (TRACK_LENGTH / (baseSpeed * 0.85)) / maxEnergy * 100)).toFixed(0)}%)`);
     console.log(`  🚀 Sprint - Power: ${secondaryProfile?.sprintPower || 60}, Efficiency: ${secondaryProfile?.sprintEfficiency || 60}, Frequency: ${secondaryProfile?.burstFrequency || 60}`);
     console.log(`  💚 Stamina Recovery: ${secondaryProfile?.staminaRecovery || 60}`);
     console.log(`  🎯 Secondary Stats: Passing=${secondaryProfile?.passingPower || 60}, Pace=${secondaryProfile?.paceControl || 60}, Fatigue=${secondaryProfile?.fatigueResistance || 60}`);
