@@ -2689,12 +2689,12 @@
       console.log(`[Track Conditions] Adaptability: ${trackAdaptability}, Speed: ${(adjustedSpeedMod * 100).toFixed(1)}%, Stamina: ${(adjustedStaminaMod * 100).toFixed(1)}%`);
     }
     
-    const baseSpeed = Math.max(4, 4.2 + maneuverAdjusted.speed * 0.025) * adjustedSpeedMod; // Closer speed ranges!
+    const baseSpeed = Math.max(6, 6.0 + maneuverAdjusted.speed * 0.05) * adjustedSpeedMod; // DOUBLED for faster races!
     const acceleration = 4 + maneuverAdjusted.speed * 0.04;
     const handlingFactor = 1 + maneuverAdjusted.handling / 220;
     const maxSpeed = baseSpeed * handlingFactor;
-    // FINAL BALANCED DRAIN: Account for recovery skills
-  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 7.0) * adjustedStaminaMod;
+    // AGGRESSIVE DRAIN: Overpower recovery, force 30-50% finish
+  const staminaDrain = Math.max(0.08, (0.35 + stats.stride / 180 - stats.endurance / 250) * 10.0) * adjustedStaminaMod;
 
     const racerObj = {
       id,
@@ -3613,10 +3613,10 @@
 
     const timeSincePass = race.time - (racer.lastPassAttempt || 0);
     if (!racer.isBlocked && timeSincePass > 2.2 && racer.energy < racer.maxEnergy) {
-      // Enhanced recovery based on staminaRecovery stat
+      // Recovery stat NERFED 5x in races
       const recoveryRating = racer.secondary?.staminaRecovery || 60;
-      const baseRecovery = 0.05 + (recoveryRating - 35) / 250; // 0.07 to 0.29
-      const regen = (baseRecovery + (racer.coolRecoveryRate || 0)) * dt;
+      const baseRecovery = (0.05 + (recoveryRating - 35) / 250) * 0.2; // NERFED 5x!
+      const regen = (baseRecovery + (racer.coolRecoveryRate || 0) * 0.1) * dt;
       recoverStamina(racer, regen);
       
       // Random stamina boost for high recovery rating
@@ -3629,8 +3629,9 @@
       }
     }
 
+    // Cool Recovery NERFED 10x in races
     if (racer.coolRecoveryRate && updatedSpeed < racer.baseSpeed * 0.65) {
-      const recovery = racer.maxEnergy * racer.coolRecoveryRate * dt;
+      const recovery = racer.maxEnergy * racer.coolRecoveryRate * 0.1 * dt;
       recoverStamina(racer, recovery);
     }
 
